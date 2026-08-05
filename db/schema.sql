@@ -561,3 +561,52 @@ INSERT INTO reference_ranges (name, min_value, max_value, unit) VALUES
   ('SGOT',                 17,   49,  'U/L'),
   ('Protein',              6,    8.3, 'g/dL')
 ON CONFLICT (name) DO NOTHING;
+
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS severity        TEXT NOT NULL DEFAULT 'alert'; -- 'sos' | 'alert'
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS acknowledged_by UUID REFERENCES users(id);
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMPTZ;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS resolved_by     UUID REFERENCES users(id);
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS resolved_at     TIMESTAMPTZ;
+ALTER TABLE alerts ADD COLUMN IF NOT EXISTS resolution      TEXT;
+
+-- anything already raised from the emergency card counts as an SOS
+UPDATE alerts SET severity='sos' WHERE severity='alert' AND message ILIKE '%SOS%';
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_kind TEXT;      -- 'audio' | 'image'
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_mime TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_secs INT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS has_media  BOOLEAN NOT NULL DEFAULT false;
+-- The mental model: a household is a family group, like a WhatsApp group.
+-- Everyone in it is a real person with their OWN health vault. What differs is
+-- their care role:
+--   'elder'  — being cared for; their vault is visible to the carers
+--   'carer'  — looking after the elders; their own vault stays private to them
+--
+-- Access is still enforced through family_members (unchanged, already wired into
+-- every endpoint). Households are the organising layer that generates those rows.
+--
+-- Idempotent. Run: psql -d parentfirst_vault -f db/migrations/016_households.sql
+
+CREATE TABLE IF NOT EXISTS households (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  invite_code TEXT UNIQUE NOT NULL,
+  created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS household_members (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  care_role    TEXT NOT NULL DEFAULT 'carer',   -- 'elder' | 'carer'
+  is_owner     BOOLEAN NOT NULL DEFAULT false,  -- can rename, invite, set roles
+  joined_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (household_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_hm_household ON household_members(household_id);
+CREATE INDEX IF NOT EXISTS idx_hm_user ON household_members(user_id);
+
+-- a person record can belong to a household
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS household_id UUID REFERENCES households(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_parents_household ON parents(household_id);

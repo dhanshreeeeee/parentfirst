@@ -6,12 +6,15 @@ import fastifyStatic from '@fastify/static';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyCookie from '@fastify/cookie';
+import rateLimit from '@fastify/rate-limit';
+import helmet from '@fastify/helmet';
 import pg from 'pg';
 import path from 'node:path';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { extractLocal } from './extract-local.js';
 import careRoutes from './routes-care.js';
+import householdRoutes from './routes-household.js';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -24,13 +27,53 @@ const pool = new pg.Pool({
   connectionString:
     process.env.DATABASE_URL ||
     `postgres://${process.env.USER || 'postgres'}@localhost:5432/parentfirst_vault`,
+  // most hosted Postgres (Railway, Render, Neon, Supabase) requires SSL
+  ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
+  max: 10,
 });
 
 const ANTHROPIC_KEY = process.env.ANTHROPIC_API_KEY || '';
 const ANTHROPIC_MODEL = process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-5';
 
-const app = Fastify({ logger: true });
-await app.register(cors, { origin: true, credentials: true });
+const IS_PROD = process.env.NODE_ENV === 'production';
+const APP_ORIGIN = process.env.APP_ORIGIN || null;   // e.g. https://app.parentfirst.in
+
+const app = Fastify({
+  logger: true,
+  trustProxy: IS_PROD,          // behind a hosting proxy, so client IPs are right
+  bodyLimit: 2 * 1024 * 1024,
+});
+
+// security headers. CSP is deliberately permissive about images/fonts because
+// the UI loads Google Fonts and YouTube thumbnails.
+await app.register(helmet, {
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://img.youtube.com'],
+      mediaSrc: ["'self'", 'blob:'],
+      frameSrc: ['https://www.youtube.com'],
+      connectSrc: ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
+});
+
+// brute-force protection, tightest on the login route
+await app.register(rateLimit, {
+  global: false,
+  max: 300,
+  timeWindow: '1 minute',
+});
+
+// In production, only our own origin may call the API with credentials.
+await app.register(cors, {
+  origin: IS_PROD ? (APP_ORIGIN || false) : true,
+  credentials: true,
+});
 await app.register(fastifyCookie);
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 await app.register(fastifyStatic, {
@@ -524,6 +567,8 @@ app.get('/api/parents/:parentId/trends', async (req) => {
 });
 
 // ── care modules (medications, daily logs, emergency card) ──────
+await app.register(householdRoutes, { pool });
+
 await app.register(careRoutes, {
   pool,
   callClaude,

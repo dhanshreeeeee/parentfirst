@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ParentFirst — AI Health Vault</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#C84B2F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="ParentFirst">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -151,6 +157,24 @@
   .tab-n{ font-size:11px; opacity:0.6; margin-left:3px; }
   .doc-src{ font-size:11px; color:var(--ink-faint); }
   .doc-btn{ padding:7px 13px !important; font-size:12.5px !important; text-decoration:none; white-space:nowrap; }
+  .fam-empty{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:2rem; text-align:center; }
+  .fam-empty h3{ font-family:var(--font-display); font-size:20px; font-weight:400; margin-bottom:0.5rem; }
+  .fam-empty p{ font-size:14px; color:var(--ink-muted); max-width:420px; margin:0 auto 1.3rem; }
+  .fam-actions{ display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+  .fam-sec{ margin-bottom:1.75rem; }
+  .fam-sec h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.8rem; }
+  .fam-n{ background:var(--cream-dark); border-radius:20px; padding:1px 8px; margin-left:5px; }
+  .fam-card{ display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.3rem; margin-bottom:0.7rem; }
+  .fam-av{ width:42px; height:42px; border-radius:50%; background:var(--rust-light); color:var(--rust); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:18px; flex-shrink:0; }
+  .fam-name{ font-size:15px; font-weight:600; }
+  .fam-you{ font-size:10px; background:var(--sage-light); color:var(--sage); padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
+  .fam-meta{ font-size:12.5px; color:var(--ink-faint); margin-top:2px; }
+  .fam-swap{ font-size:12px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink-muted); white-space:nowrap; }
+  .fam-swap:hover{ border-color:var(--rust); color:var(--rust); }
+  .fam-invite{ background:var(--ink); color:#fff; border-radius:var(--r-lg); padding:1.3rem 1.5rem; }
+  .fam-inv-l{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:rgba(255,255,255,0.5); }
+  .fam-code{ font-family:var(--font-display); font-size:30px; letter-spacing:3px; margin:0.3rem 0; }
+  .fam-inv-hint{ font-size:12.5px; color:rgba(255,255,255,0.65); }
   .doc-row{ display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.2rem; margin-bottom:0.7rem; }
   .doc-ic{ font-size:22px; }
   .doc-title{ font-size:14.5px; font-weight:600; }
@@ -597,6 +621,7 @@
     <button class="side-btn" data-v="wellness" onclick="nav_('wellness')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Food &amp; Wellness</button>
     <button class="side-btn" data-v="activities" onclick="nav_('activities')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Activities &amp; Wellness</button>
     <div class="side-sec">Manage</div>
+    <button class="side-btn" data-v="family" onclick="nav_('family')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Family Group</button>
     <button class="side-btn" data-v="ops" data-req="admin" onclick="nav_('ops')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Requests <span class="side-badge" id="opsBadge"></span></button>
     <button class="side-btn" data-v="details" onclick="nav_('details')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Details &amp; Profile</button>
     <button class="side-btn" data-v="docs" onclick="nav_('docs')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Documents</button>
@@ -799,6 +824,14 @@
       <p class="psub">Every booking and alert across your families. Call, then move it along.</p>
       <div id="opsAlerts"></div>
       <div id="opsList"></div>
+    </div>
+
+    <!-- FAMILY GROUP -->
+    <div class="view" id="view-family">
+      <div class="page-eyebrow">Family Group</div>
+      <h1 class="pt" id="famTitle">Your <em>family</em></h1>
+      <p class="psub">Everyone here has their own health vault. Those being cared for share theirs with the family; carers keep theirs private.</p>
+      <div id="famBody"></div>
     </div>
 
     <!-- FOOD & WELLNESS -->
@@ -1139,6 +1172,24 @@ async function submitAuth(){
     await boot();
   }catch(e){ errBox.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
 }
+async function changePassword(){
+  closeMenus('');
+  const res = await formModal({
+    title:'Change password', subtitle:'You\'ll stay signed in here; other devices will be signed out.',
+    submitLabel:'Update password',
+    fields:[
+      {id:'current', label:'Current password', type:'password', placeholder:'••••••••'},
+      {id:'next',    label:'New password', type:'password', placeholder:'at least 8 characters'},
+    ],
+  });
+  if(!res) return;
+  if(!res.current || !res.next){ toast('Both fields are needed.','error'); return; }
+  if(res.next.length<8){ toast('New password must be at least 8 characters.','error'); return; }
+  try{
+    await j('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    toast('Password updated.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
 async function logout(){
   await fetch(API+'/api/auth/logout', {method:'POST',credentials:'same-origin'});
   ME=null; PARENT=null;
@@ -1174,6 +1225,7 @@ function renderUserMenu(){
   menu.innerHTML = '<div class="pick-head">'+esc(ME.user.name)+'<br><span style="color:var(--ink-faint);">'+esc(ME.user.email)+'</span></div>'
     + (!IS_DEPENDENT && roleAtLeast(myRole(),'admin') ? '<div class="pick-div"></div><button class="pick-item" onclick="openMembers()">👨‍👩‍👧 Family &amp; roles</button>' : '')
     + (!IS_DEPENDENT ? '<div class="pick-div"></div><button class="pick-item" onclick="window.open(\'/caregiver\',\'_blank\')">📱 Caregiver view</button>' : '')
+    + '<div class="pick-div"></div><button class="pick-item" onclick="changePassword()">🔑 Change password</button>'
     + '<div class="pick-div"></div><button class="pick-item" onclick="logout()">Sign out</button>';
 }
 
@@ -1277,6 +1329,7 @@ function nav_(v){
   if(v==='vitals')loadVitals();
   if(v==='timeline')loadTimeline();
   if(v==='ops')loadOps();
+  if(v==='family')loadFamily();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -1422,7 +1475,7 @@ async function applyProfileAdaptations(){
 // dependents see a simplified version of the same app
 // allow-list: only the screens that are about THEIR day, not family management
 const DEPENDENT_VIEWS = ['me','messages','appts','meds','vault','compare','trends',
-  'getcare','emergency','team','activities','wellness','details','docs','detail','vitals','timeline'];
+  'getcare','emergency','team','activities','wellness','details','docs','detail','vitals','timeline','family'];
 function applyDependentMode(){
   document.body.classList.toggle('dependent-mode', !!IS_DEPENDENT);
   // show/hide each nav item (JS is the single source of truth)
@@ -2701,6 +2754,72 @@ function msgMedia(m){
   if(m.media_kind==='image') return '<img class="msg-img" src="/api/messages/'+m.id+'/media" alt="">';
   return '<audio class="msg-audio" controls src="/api/messages/'+m.id+'/media"></audio>'
     + (m.media_secs? '<span class="msg-secs">'+Math.floor(m.media_secs/60)+':'+String(m.media_secs%60).padStart(2,'0')+'</span>':'');
+}
+
+if('serviceWorker' in navigator && (location.protocol==='https:' || location.hostname==='localhost')){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}));
+}
+
+// ═══════════ FAMILY GROUP ═══════════
+let HOUSE=null;
+async function loadFamily(){
+  const body=document.getElementById('famBody');
+  let list;
+  try{ list = await j('/api/households'); }
+  catch(e){ body.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  if(!list.length){
+    body.innerHTML =
+      '<div class="fam-empty"><h3>You\'re not in a family group yet</h3>'
+      + '<p>A group holds everyone together — the people being cared for and the people looking after them.</p>'
+      + '<div class="fam-actions"><button class="btn-primary" onclick="createHousehold()">Create a family group</button>'
+      + '<button class="btn-out" onclick="joinHousehold()">Join with a code</button></div></div>';
+    return;
+  }
+  HOUSE = list[0];
+  let d;
+  try{ d = await j('/api/households/'+HOUSE.id); }catch(e){ body.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  document.getElementById('famTitle').innerHTML = esc(d.household.name);
+  const elders=d.members.filter(m=>m.care_role==='elder');
+  const carers=d.members.filter(m=>m.care_role!=='elder');
+  const card=(m)=>'<div class="fam-card"><div class="fam-av">'+esc(m.name[0])+'</div>'
+    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
+    + '<div class="fam-meta">'+esc(m.email)+(m.age?' · '+m.age:'')+(m.is_owner?' · group owner':'')+'</div></div>'
+    + (d.me.is_owner && m.user_id!==ME.user.id
+        ? '<button class="fam-swap" onclick="setCareRole(\''+m.user_id+'\',\''+(m.care_role==='elder'?'carer':'elder')+'\')">Make '+(m.care_role==='elder'?'carer':'cared for')+'</button>' : '')
+    + '</div>';
+  body.innerHTML =
+    '<div class="fam-sec"><h4>Being cared for <span class="fam-n">'+elders.length+'</span></h4>'
+    + (elders.length? elders.map(card).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — mark a member as cared for.</div>')
+    + '</div>'
+    + '<div class="fam-sec"><h4>Looking after them <span class="fam-n">'+carers.length+'</span></h4>'+carers.map(card).join('')+'</div>'
+    + (d.invite_code
+        ? '<div class="fam-invite"><div class="fam-inv-l">Invite code</div><div class="fam-code">'+esc(d.invite_code)+'</div>'
+          + '<div class="fam-inv-hint">Share this with family. They sign up, then enter it to join the group.</div></div>'
+        : '')
+    + '<div class="disclaimer">Everyone in a group can see the vaults of those being cared for. A carer\'s own vault stays private to them.</div>';
+}
+async function createHousehold(){
+  const res=await formModal({ title:'Create a family group', subtitle:'Give it a name your family will recognise.', submitLabel:'Create',
+    fields:[{id:'name',label:'Group name',placeholder:'e.g. Khandelwal Family'},
+            {id:'care_role',label:'And you are…',options:[{label:'Looking after someone',value:'carer'},{label:'Being cared for',value:'elder'}]}] });
+  if(!res || !res.name) return;
+  try{ await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    toast('Group created.','success'); ME=await j('/api/me'); loadFamily(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function joinHousehold(){
+  const res=await formModal({ title:'Join a family group', subtitle:'Ask whoever set it up for the invite code.', submitLabel:'Join',
+    fields:[{id:'invite_code',label:'Invite code',placeholder:'e.g. C25CF09D'},
+            {id:'care_role',label:'You are…',options:[{label:'Looking after someone',value:'carer'},{label:'Being cared for',value:'elder'}]}] });
+  if(!res || !res.invite_code) return;
+  try{ await j('/api/households/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    toast('Joined.','success'); ME=await j('/api/me'); loadFamily(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function setCareRole(userId, role){
+  try{ await j('/api/households/'+HOUSE.id+'/members/'+userId+'/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({care_role:role})});
+    toast('Updated.','success'); ME=await j('/api/me'); loadFamily(); }
+  catch(e){ toast(e.message,'error'); }
 }
 
 init();

@@ -34,6 +34,31 @@ function banner(title, lines) {
 }
 
 /**
+ * Send to specific people (the family), falling back to the operator address.
+ * @param {object} app
+ * @param {string[]} recipients  email addresses
+ * @param {string} subject
+ * @param {string[]} lines
+ */
+export async function notifyPeople(app, recipients, subject, lines) {
+  const to = (recipients || []).filter(Boolean).join(', ') || NOTIFY_TO;
+  try { app.log.info(banner(subject + ' → ' + to, lines)); } catch { console.log(banner(subject, lines)); }
+  if (!transporter || !to) return { sent: false, reason: 'SMTP not configured' };
+  try {
+    await transporter.sendMail({
+      from: NOTIFY_FROM || SMTP_USER,
+      to,
+      subject: `[ParentFirst] ${subject}`,
+      text: lines.join('\n') + '\n\n— ParentFirst',
+    });
+    return { sent: true, to };
+  } catch (e) {
+    try { app.log.error('notify email failed: ' + e.message); } catch { /* ignore */ }
+    return { sent: false, reason: e.message };
+  }
+}
+
+/**
  * @param {object} app    fastify instance (for logging)
  * @param {string} subject
  * @param {string[]} lines  plain-text detail lines

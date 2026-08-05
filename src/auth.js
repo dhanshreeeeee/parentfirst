@@ -43,6 +43,8 @@ export function roleAtLeast(role, needed) {
 
 // Create a default admin + link existing parents, so first run has a login.
 export async function ensureSeed(pool) {
+  // A printed default password is fine on a laptop, dangerous on the internet.
+  if (process.env.NODE_ENV === 'production') return null;
   const { rows } = await pool.query('SELECT count(*)::int AS c FROM users');
   if (rows[0].c > 0) return null;
   const email = 'dhanshree@parentfirst.local';
@@ -105,7 +107,9 @@ async function authPluginImpl(app, { pool }) {
   });
 
   // ── signup: creates a user (owner or dependent) ──
-  app.post('/api/auth/signup', async (req, reply) => {
+  app.post('/api/auth/signup', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
     const { email, name, password, account_type } = req.body || {};
     if (!email || !name || !password) return reply.code(400).send({ error: 'email, name, password required' });
     if (password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' });
@@ -120,7 +124,9 @@ async function authPluginImpl(app, { pool }) {
   });
 
   // ── login ──
-  app.post('/api/auth/login', async (req, reply) => {
+  app.post('/api/auth/login', {
+    config: { rateLimit: { max: 8, timeWindow: '5 minutes' } },
+  }, async (req, reply) => {
     const { email, password } = req.body || {};
     if (!email || !password) return reply.code(400).send({ error: 'email and password required' });
     const { rows } = await pool.query('SELECT * FROM users WHERE email=$1', [email.toLowerCase()]);
@@ -159,9 +165,26 @@ async function authPluginImpl(app, { pool }) {
     };
   });
 
+  app.post('/api/auth/change-password', async (req, reply) => {
+    if (!req.user) return reply.code(401).send({ error: 'not authenticated' });
+    const { current, next } = req.body || {};
+    if (!current || !next) return reply.code(400).send({ error: 'current and next password required' });
+    if (next.length < 8) return reply.code(400).send({ error: 'new password must be at least 8 characters' });
+    const { rows } = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+    if (!rows[0] || !verifyPassword(current, rows[0].password_hash)) {
+      return reply.code(401).send({ error: 'current password is not right' });
+    }
+    await pool.query('UPDATE users SET password_hash=$2 WHERE id=$1', [req.user.id, hashPassword(next)]);
+    // sign out other devices, keep this one
+    const token = req.cookies?.[COOKIE];
+    await pool.query('DELETE FROM sessions WHERE user_id=$1 AND token <> $2', [req.user.id, token || '']);
+    return { ok: true };
+  });
+
   function setCookie(reply, token) {
     reply.setCookie(COOKIE, token, {
       path: '/', httpOnly: true, sameSite: 'lax',
+      secure: process.env.NODE_ENV === 'production',   // HTTPS only in production
       maxAge: SESSION_DAYS * 86400,
     });
   }

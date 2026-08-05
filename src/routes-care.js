@@ -1,4 +1,4 @@
-import { notifyOperator } from './notify.js';
+import { notifyOperator, notifyPeople } from './notify.js';
 // Care modules: medications, caregiver daily logs (+ family update), emergency card.
 // Registered as a Fastify plugin from server.js.
 
@@ -1111,12 +1111,20 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       'INSERT INTO alerts (parent_id, message, created_by, severity) VALUES ($1,$2,$3,$4) RETURNING *',
       [req.params.parentId, message, req.user.id, severity === 'sos' ? 'sos' : 'alert']);
     const { rows: pr2 } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
-    notifyOperator(app, `\u26a0 Alert raised for ${pr2[0]?.name || 'a parent'}`, [
-      `Raised by: ${req.user.name}`,
-      `Message:   ${message}`,
-      '',
-      'ACTION: check on the family.',
-    ]).catch(() => {});
+    // tell everyone who looks after this person
+    const { rows: watchers } = await pool.query(
+      `SELECT DISTINCT u.email FROM family_members fm JOIN users u ON u.id = fm.user_id
+       WHERE fm.parent_id=$1 AND fm.role IN ('admin','member') AND u.id <> $2`,
+      [req.params.parentId, req.user.id]);
+    const isSos = (severity === 'sos');
+    notifyPeople(app, watchers.map((w) => w.email),
+      `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'a family member'}`, [
+        `${message}`,
+        '',
+        `Raised by: ${req.user.name}`,
+        isSos ? 'Please call them now. Open the app to see who else is responding.'
+              : 'Open the app to see the details and mark it resolved.',
+      ]).catch(() => {});
     return rows[0];
   });
   app.get('/api/parents/:parentId/alerts', async (req) => {
