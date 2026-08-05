@@ -6,8 +6,6 @@ import fastifyStatic from '@fastify/static';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
 import fastifyCookie from '@fastify/cookie';
-import rateLimit from '@fastify/rate-limit';
-import helmet from '@fastify/helmet';
 import pg from 'pg';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -42,31 +40,6 @@ const app = Fastify({
   logger: true,
   trustProxy: IS_PROD,          // behind a hosting proxy, so client IPs are right
   bodyLimit: 2 * 1024 * 1024,
-});
-
-// security headers. CSP is deliberately permissive about images/fonts because
-// the UI loads Google Fonts and YouTube thumbnails.
-await app.register(helmet, {
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"],
-      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://img.youtube.com'],
-      mediaSrc: ["'self'", 'blob:'],
-      frameSrc: ['https://www.youtube.com'],
-      connectSrc: ["'self'"],
-    },
-  },
-  crossOriginEmbedderPolicy: false,
-});
-
-// brute-force protection, tightest on the login route
-await app.register(rateLimit, {
-  global: false,
-  max: 300,
-  timeWindow: '1 minute',
 });
 
 // In production, only our own origin may call the API with credentials.
