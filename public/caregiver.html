@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ParentFirst — Daily Care</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  :root{
+    --cream:#F5F0E8; --white:#FDFCFA; --ink:#1A1714; --muted:#5C5650; --faint:#9C9690;
+    --rust:#C84B2F; --rust-dark:#9E3820; --rust-light:#F0D5CE;
+    --sage:#4A6741; --sage-light:#D4E0D2; --gold:#B8860B; --gold-light:#F5EDD0;
+    --red:#C0392B; --red-light:#F5D5D0; --border:rgba(26,23,20,0.12);
+    --font-d:'Fraunces',serif; --font-b:'DM Sans',sans-serif;
+  }
+  body{ font-family:var(--font-b); background:var(--cream); color:var(--ink); line-height:1.5; padding-bottom:2rem; }
+  .wrap{ max-width:520px; margin:0 auto; padding:1rem; }
+  .top{ display:flex; align-items:center; justify-content:space-between; padding:0.5rem 0.25rem 1rem; }
+  .who{ font-family:var(--font-d); font-size:22px; }
+  .who small{ display:block; font-family:var(--font-b); font-size:13px; color:var(--faint); font-weight:400; }
+  .out{ font-size:13px; color:var(--muted); background:var(--white); border:1px solid var(--border); padding:8px 14px; border-radius:20px; }
+  .card{ background:var(--white); border:1px solid var(--border); border-radius:20px; padding:1.25rem; margin-bottom:1.1rem; }
+  .card h2{ font-family:var(--font-d); font-size:19px; font-weight:500; margin-bottom:0.25rem; }
+  .card .sub{ font-size:13.5px; color:var(--faint); margin-bottom:1rem; }
+  /* medicines */
+  .slot-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--faint); margin:1rem 0 0.5rem; }
+  .slot-label:first-child{ margin-top:0; }
+  .pill{ display:flex; align-items:center; gap:14px; width:100%; background:var(--cream); border:2px solid transparent; border-radius:16px; padding:16px 18px; margin-bottom:10px; text-align:left; transition:all .15s; }
+  .pill:active{ transform:scale(0.98); }
+  .pill.done{ background:var(--sage-light); border-color:var(--sage); }
+  .pill .box{ width:34px; height:34px; border-radius:50%; border:2.5px solid var(--faint); flex-shrink:0; display:flex; align-items:center; justify-content:center; }
+  .pill.done .box{ background:var(--sage); border-color:var(--sage); }
+  .pill .box svg{ width:18px; height:18px; stroke:#fff; opacity:0; }
+  .pill.done .box svg{ opacity:1; }
+  .pill .nm{ font-size:17px; font-weight:600; }
+  .pill .ds{ font-size:13px; color:var(--muted); }
+  .pill.done .nm{ color:var(--sage); }
+  .done-tag{ margin-left:auto; font-size:12px; font-weight:600; color:var(--sage); opacity:0; }
+  .pill.done .done-tag{ opacity:1; }
+  /* check-in */
+  .q{ font-size:15px; font-weight:600; margin:1.1rem 0 0.6rem; }
+  .opts{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+  .opts.three{ grid-template-columns:repeat(3,1fr); }
+  .opt{ background:var(--cream); border:2px solid transparent; border-radius:14px; padding:14px 6px; text-align:center; font-size:13px; font-weight:600; color:var(--muted); }
+  .opt .emo{ font-size:26px; display:block; margin-bottom:3px; }
+  .opt:active{ transform:scale(0.96); }
+  .opt.sel{ background:var(--rust-light); border-color:var(--rust); color:var(--rust-dark); }
+  textarea{ width:100%; font-family:var(--font-b); font-size:16px; background:var(--cream); border:2px solid transparent; border-radius:14px; padding:14px; min-height:80px; resize:none; margin-top:0.4rem; }
+  textarea:focus{ outline:none; border-color:var(--rust); background:var(--white); }
+  .big{ width:100%; background:var(--rust); color:#fff; border:none; border-radius:16px; padding:18px; font-size:17px; font-weight:700; margin-top:1.25rem; }
+  .big:active{ background:var(--rust-dark); }
+  .big.ghost{ background:var(--white); color:var(--red); border:2px solid var(--red-light); }
+  .big[disabled]{ opacity:0.5; }
+  .ok-banner{ background:var(--sage-light); color:var(--sage); border-radius:14px; padding:14px 16px; font-size:14.5px; font-weight:600; text-align:center; margin-bottom:1.1rem; display:none; }
+  .ok-banner.show{ display:block; }
+  .flag-card{ border-color:var(--red-light); }
+  .flag-card h2{ color:var(--red); }
+  .adh{ font-size:13px; color:var(--faint); margin-top:0.25rem; }
+  /* login */
+  .login{ position:fixed; inset:0; background:var(--cream); display:flex; align-items:center; justify-content:center; padding:1.5rem; z-index:50; }
+  .login .card{ max-width:380px; width:100%; }
+  .login h2{ text-align:center; font-size:22px; }
+  .login p{ text-align:center; font-size:13.5px; color:var(--muted); margin-bottom:1rem; }
+  .login input{ width:100%; font-size:16px; background:var(--cream); border:2px solid transparent; border-radius:14px; padding:14px; margin-bottom:10px; }
+  .login input:focus{ outline:none; border-color:var(--rust); background:var(--white); }
+  .err{ background:var(--red-light); color:var(--red); font-size:13.5px; padding:11px 14px; border-radius:12px; margin-bottom:10px; display:none; }
+  .err.show{ display:block; }
+  .hidden{ display:none !important; }
+  .switch-note{ font-size:12.5px; color:var(--faint); text-align:center; margin-top:1rem; }
+  .switch-note a{ color:var(--rust); }
+</style>
+</head>
+<body>
+<!-- LOGIN -->
+<div class="login" id="login">
+  <div class="card">
+    <h2>Daily Care</h2>
+    <p>Sign in to log the day.</p>
+    <div class="err" id="loginErr"></div>
+    <input id="email" type="email" placeholder="Email" autocomplete="username">
+    <input id="password" type="password" placeholder="Password" autocomplete="current-password">
+    <button class="big" onclick="doLogin()">Sign in</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div class="wrap hidden" id="app">
+  <div class="top">
+    <div class="who">Namaste 🙏<small id="cgName"></small></div>
+    <button class="out" onclick="doLogout()">Sign out</button>
+  </div>
+
+  <div class="ok-banner" id="okBanner">✓ Saved. Thank you!</div>
+
+  <!-- medicines -->
+  <div class="card">
+    <h2 id="medHead">Medicines today</h2>
+    <div class="sub" id="medSub">Tap each one after <span id="pname">Papa</span> takes it.</div>
+    <div id="medList"></div>
+    <div class="adh" id="adh"></div>
+  </div>
+
+  <!-- check-in -->
+  <div class="card">
+    <h2>How is <span class="pname2">Papa</span> today?</h2>
+    <div class="sub">A few taps — the family will see this.</div>
+
+    <div class="q">Mood</div>
+    <div class="opts" id="mood">
+      <button class="opt" data-g="mood" data-v="happy"><span class="emo">😊</span>Happy</button>
+      <button class="opt" data-g="mood" data-v="calm"><span class="emo">🙂</span>Calm</button>
+      <button class="opt" data-g="mood" data-v="low"><span class="emo">😕</span>Low</button>
+      <button class="opt" data-g="mood" data-v="unwell"><span class="emo">🤒</span>Unwell</button>
+    </div>
+
+    <div class="q">Did they eat well?</div>
+    <div class="opts three" id="ate">
+      <button class="opt" data-g="ate" data-v="yes">Yes</button>
+      <button class="opt" data-g="ate" data-v="partly">A little</button>
+      <button class="opt" data-g="ate" data-v="no">No</button>
+    </div>
+
+    <div class="q">Sleep last night</div>
+    <div class="opts three" id="sleep">
+      <button class="opt" data-g="sleep" data-v="good">Good</button>
+      <button class="opt" data-g="sleep" data-v="ok">Okay</button>
+      <button class="opt" data-g="sleep" data-v="poor">Poor</button>
+    </div>
+
+    <div class="q">Anything to tell the family?</div>
+    <textarea id="note" placeholder="e.g. Enjoyed a walk, asked about the children..."></textarea>
+
+    <button class="big" onclick="sendUpdate()" id="sendBtn">Send today's update</button>
+  </div>
+
+  <!-- flag a problem -->
+  <div class="card flag-card">
+    <h2>Something wrong?</h2>
+    <div class="sub">Tap to alert the family right away.</div>
+    <div id="flagClosed">
+      <button class="big ghost" onclick="openFlag()">Report a problem</button>
+    </div>
+    <div id="flagOpen" style="display:none;">
+      <textarea id="flagText" placeholder="What's wrong? e.g. Papa seems weak and skipped lunch"></textarea>
+      <div style="display:flex;gap:10px;margin-top:0.5rem;">
+        <button class="big" style="background:var(--white);color:var(--muted);border:2px solid var(--border);" onclick="closeFlag()">Cancel</button>
+        <button class="big ghost" onclick="sendFlag()">Send alert</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let ME=null, PARENT=null, MEDS=null;
+const sel={mood:null,ate:null,sleep:null};
+
+async function api(url,opts){ opts=opts||{}; opts.credentials='same-origin'; const r=await fetch(url,opts); if(r.status===401){ showLogin(); throw new Error('sign in'); } if(!r.ok){ const t=await r.json().catch(()=>({error:'error'})); throw new Error(t.error||'error'); } return r.json(); }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showLogin(){ document.getElementById('login').classList.remove('hidden'); document.getElementById('app').classList.add('hidden'); }
+function showApp(){ document.getElementById('login').classList.add('hidden'); document.getElementById('app').classList.remove('hidden'); }
+
+async function doLogin(){
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value;
+  const err=document.getElementById('loginErr');
+  try{
+    const r=await fetch('/api/auth/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,password})});
+    if(!r.ok){ const t=await r.json().catch(()=>({error:'Login failed'})); throw new Error(t.error); }
+    err.classList.remove('show'); document.getElementById('password').value='';
+    boot();
+  }catch(e){ err.textContent=e.message; err.classList.add('show'); }
+}
+async function doLogout(){ await fetch('/api/auth/logout',{method:'POST',credentials:'same-origin'}); ME=null; showLogin(); }
+
+async function boot(){
+  ME = await api('/api/me');
+  if(!ME.parents.length){ document.getElementById('cgName').textContent='No parent assigned yet'; showApp(); return; }
+  // caregivers usually have one parent; pick the first
+  PARENT = ME.parents[0];
+  const first = PARENT.name.split(' ')[0];
+  document.getElementById('cgName').textContent = ME.user.name+' · caring for '+PARENT.name;
+  document.querySelectorAll('.pname2').forEach(el=>el.textContent=first);
+  document.getElementById('pname').textContent=first;
+  showApp();
+  loadMeds();
+}
+
+async function loadMeds(){
+  const t = await api('/api/parents/'+PARENT.id+'/medications/today');
+  MEDS=t;
+  const labels={morning:'☀️ Morning',afternoon:'🌤️ Afternoon',night:'🌙 Night'};
+  let html='';
+  for(const slot of ['morning','afternoon','night']){
+    const items=t.schedule[slot]; if(!items.length) continue;
+    html+='<div class="slot-label">'+labels[slot]+'</div>';
+    for(const m of items){
+      html+='<button class="pill '+(m.taken?'done':'')+'" onclick="toggle(\''+m.id+'\',\''+slot+'\','+(!m.taken)+')">'
+        +'<span class="box"><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>'
+        +'<span><span class="nm">'+esc(m.name)+'</span> <span class="ds">'+esc(m.dosage||'')+'</span></span>'
+        +'<span class="done-tag">Given ✓</span></button>';
+    }
+  }
+  document.getElementById('medList').innerHTML = html || '<div class="sub">No medicines added yet.</div>';
+  document.getElementById('adh').textContent = t.due? (t.done+' of '+t.due+' given today') : '';
+}
+async function toggle(id,slot,taken){
+  try{ await api('/api/medications/'+id+'/log',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot,taken})}); loadMeds(); }
+  catch(e){ flash(e.message); }
+}
+
+document.addEventListener('click',e=>{
+  const o=e.target.closest('.opt'); if(!o) return;
+  o.parentElement.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));
+  o.classList.add('sel'); sel[o.dataset.g]=o.dataset.v;
+});
+
+function flash(msg){ const b=document.getElementById('okBanner'); b.textContent=msg; b.classList.add('show'); window.scrollTo({top:0,behavior:'smooth'}); setTimeout(()=>b.classList.remove('show'),3500); }
+
+async function sendUpdate(){
+  const btn=document.getElementById('sendBtn'); btn.disabled=true;
+  try{
+    await api('/api/parents/'+PARENT.id+'/logs',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mood:sel.mood,ate_well:sel.ate,sleep_quality:sel.sleep,notes:document.getElementById('note').value.trim()})});
+    document.getElementById('note').value='';
+    document.querySelectorAll('.opt').forEach(x=>x.classList.remove('sel'));
+    sel.mood=sel.ate=sel.sleep=null;
+    flash('✓ Update sent to the family. Thank you!');
+  }catch(e){ flash(e.message); }
+  btn.disabled=false;
+}
+
+function openFlag(){ document.getElementById('flagClosed').style.display='none'; document.getElementById('flagOpen').style.display='block'; document.getElementById('flagText').focus(); }
+function closeFlag(){ document.getElementById('flagOpen').style.display='none'; document.getElementById('flagClosed').style.display='block'; document.getElementById('flagText').value=''; }
+async function sendFlag(){
+  const msg=document.getElementById('flagText').value.trim();
+  if(!msg){ document.getElementById('flagText').focus(); return; }
+  try{
+    await api('/api/parents/'+PARENT.id+'/alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    closeFlag();
+    flash('⚠️ The family has been alerted.');
+  }catch(e){ flash('Could not send: '+e.message); }
+}
+
+// boot if already signed in
+(async ()=>{ try{ const me=await fetch('/api/me',{credentials:'same-origin'}).then(r=>r.ok?r.json():null); if(me){ ME=me; boot(); } else showLogin(); }catch(e){ showLogin(); } })();
+</script>
+</body>
+</html>

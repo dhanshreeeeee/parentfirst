@@ -1,0 +1,58 @@
+// Operator notifications.
+// While bookings are fulfilled by hand, the operator needs to KNOW the moment
+// something comes in. Sends email if SMTP is configured in .env; always logs
+// loudly to the server console as a fallback so nothing is silently missed.
+import nodemailer from 'nodemailer';
+
+const {
+  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS,
+  NOTIFY_FROM, NOTIFY_TO,
+} = process.env;
+
+let transporter = null;
+if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: +(SMTP_PORT || 587),
+    secure: +(SMTP_PORT || 587) === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+}
+
+export function notifyConfigured() {
+  return !!transporter && !!NOTIFY_TO;
+}
+
+function banner(title, lines) {
+  const w = 64;
+  const bar = '─'.repeat(w);
+  return ['\n┌' + bar + '┐',
+    '  ' + title,
+    bar,
+    ...lines.map((l) => '  ' + l),
+    '└' + bar + '┘\n'].join('\n');
+}
+
+/**
+ * @param {object} app    fastify instance (for logging)
+ * @param {string} subject
+ * @param {string[]} lines  plain-text detail lines
+ */
+export async function notifyOperator(app, subject, lines) {
+  // always log — this is the guaranteed channel
+  try { app.log.info(banner(subject, lines)); } catch { console.log(banner(subject, lines)); }
+
+  if (!transporter || !NOTIFY_TO) return { sent: false, reason: 'SMTP not configured' };
+  try {
+    await transporter.sendMail({
+      from: NOTIFY_FROM || SMTP_USER,
+      to: NOTIFY_TO,
+      subject: `[ParentFirst] ${subject}`,
+      text: lines.join('\n') + '\n\n— ParentFirst',
+    });
+    return { sent: true };
+  } catch (e) {
+    try { app.log.error('notify email failed: ' + e.message); } catch { /* ignore */ }
+    return { sent: false, reason: e.message };
+  }
+}

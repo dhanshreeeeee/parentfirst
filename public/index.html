@@ -1,0 +1,2709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ParentFirst — AI Health Vault</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{ margin:0; padding:0; box-sizing:border-box; }
+  :root{
+    --cream:#F5F0E8; --cream-dark:#EDE6D6; --cream-darker:#E4DAC5;
+    --ink:#1A1714; --ink-muted:#5C5650; --ink-faint:#9C9690;
+    --rust:#C84B2F; --rust-light:#F0D5CE; --rust-dark:#9E3820;
+    --sage:#4A6741; --sage-light:#D4E0D2; --sage-mid:#7DAF73;
+    --gold:#B8860B; --gold-light:#F5EDD0;
+    --blue:#3A5A78; --blue-light:#D2DEE8;
+    --red:#C0392B; --red-light:#F5D5D0;
+    --white:#FDFCFA;
+    --border:rgba(26,23,20,0.12); --border-strong:rgba(26,23,20,0.22);
+    --font-display:'Fraunces',Georgia,serif; --font-body:'DM Sans',-apple-system,sans-serif;
+    --r:14px; --r-lg:22px; --r-xl:30px;
+    --shadow-sm:0 4px 12px rgba(26,23,20,0.05);
+  }
+  body{ font-family:var(--font-body); background:var(--cream); color:var(--ink); line-height:1.55; -webkit-font-smoothing:antialiased; }
+  button{ font-family:var(--font-body); cursor:pointer; }
+  nav{ position:sticky; top:0; z-index:100; display:flex; align-items:center; justify-content:space-between; padding:0 1.75rem; height:60px; background:rgba(245,240,232,0.92); -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px); border-bottom:1px solid var(--border); }
+  .logo{ display:flex; align-items:center; gap:9px; }
+  .logo-mark{ width:31px; height:31px; border-radius:9px; background:var(--rust); display:flex; align-items:center; justify-content:center; }
+  .logo-mark svg{ width:16px; height:16px; fill:white; }
+  .logo-name{ font-family:var(--font-display); font-size:17px; font-weight:500; }
+  .logo-name span{ color:var(--rust); }
+  .logo-tag{ font-size:11px; color:var(--ink-faint); border-left:1px solid var(--border); padding-left:9px; }
+  .parent-pick{ display:flex; align-items:center; gap:8px; background:var(--white); border:1px solid var(--border); border-radius:20px; padding:5px 12px 5px 6px; font-size:13px; }
+  .parent-pick .pp-av{ width:24px; height:24px; border-radius:50%; background:var(--rust-light); color:var(--rust); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; }
+  .ai-pill{ font-size:11px; padding:4px 10px; border-radius:20px; background:var(--cream-dark); color:var(--ink-faint); }
+  .ai-pill.on{ background:var(--sage-light); color:var(--sage); }
+  .user-btn{ position:relative; cursor:pointer; }
+  .user-av{ width:32px; height:32px; border-radius:50%; background:var(--ink); color:white; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600; }
+  .pick-menu{ display:none; position:absolute; top:calc(100% + 8px); left:0; min-width:210px; background:var(--white); border:1px solid var(--border); border-radius:var(--r); box-shadow:0 12px 32px rgba(26,23,20,0.14); padding:6px; z-index:200; }
+  .pick-menu.open{ display:block; }
+  .pick-item{ display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:9px; font-size:13.5px; color:var(--ink); cursor:pointer; border:none; background:transparent; width:100%; text-align:left; }
+  .pick-item:hover{ background:var(--cream-dark); }
+  .pick-item.active{ background:var(--cream); }
+  .pick-av{ width:26px; height:26px; border-radius:50%; background:var(--rust-light); color:var(--rust); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; flex-shrink:0; }
+  .pick-role{ margin-left:auto; font-size:10px; text-transform:uppercase; letter-spacing:0.4px; color:var(--ink-faint); }
+  .pick-div{ height:1px; background:var(--border); margin:5px 0; }
+  .pick-head{ font-size:11px; color:var(--ink-faint); padding:6px 11px 3px; }
+  .auth-overlay{ display:none; position:fixed; inset:0; background:var(--cream); z-index:1000; align-items:center; justify-content:center; padding:1.5rem; }
+  .auth-overlay.open{ display:flex; }
+  .auth-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-xl); padding:2.5rem; max-width:400px; width:100%; box-shadow:0 20px 60px rgba(26,23,20,0.12); }
+  .role-hidden{ display:none !important; }
+  .al-card{ border-radius:var(--r-lg); padding:1.3rem 1.4rem; margin-bottom:1rem; border:1px solid var(--border); border-left:5px solid var(--gold); background:var(--white); }
+  .al-lvl-sos{ border-left-color:var(--red); background:linear-gradient(90deg,var(--red-light),var(--white) 45%); }
+  .al-top{ display:flex; gap:11px; align-items:flex-start; }
+  .al-badge{ font-size:10px; font-weight:800; letter-spacing:0.8px; background:var(--gold); color:#fff; padding:4px 9px; border-radius:6px; flex-shrink:0; }
+  .al-lvl-sos .al-badge{ background:var(--red); }
+  .al-msg{ flex:1; font-size:14.5px; line-height:1.5; }
+  .al-when{ font-size:11.5px; color:var(--ink-faint); white-space:nowrap; }
+  .al-steps{ margin-top:1rem; }
+  .al-steps-h{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.4rem; }
+  .al-steps ol{ margin:0; padding-left:1.15rem; }
+  .al-steps li{ font-size:13px; color:var(--ink-muted); margin-bottom:3px; line-height:1.5; }
+  .al-calls{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:8px; margin-top:1rem; }
+  .al-call{ display:flex; flex-direction:column; background:var(--white); border:1.5px solid var(--border); border-radius:12px; padding:10px 13px; text-decoration:none; color:var(--ink); }
+  .al-call:hover{ border-color:var(--rust); }
+  .al-call-l{ font-size:14px; font-weight:600; }
+  .al-call-s{ font-size:11px; color:var(--ink-faint); margin-top:1px; }
+  .al-ambulance{ background:var(--red); border-color:var(--red); }
+  .al-ambulance .al-call-l, .al-ambulance .al-call-s{ color:#fff; }
+  .al-facts{ font-size:12px; color:var(--ink-muted); background:var(--cream); border-radius:10px; padding:9px 12px; margin-top:0.9rem; }
+  .al-actions{ display:flex; gap:9px; align-items:center; margin-top:1rem; flex-wrap:wrap; }
+  .al-btn{ font-size:13px; font-weight:600; border-radius:10px; padding:9px 16px; border:none; }
+  .al-ack-btn{ background:var(--ink); color:#fff; }
+  .al-resolve{ background:transparent; border:1.5px solid var(--border-strong); color:var(--ink-muted); }
+  .al-resolve:hover{ border-color:var(--sage); color:var(--sage); }
+  .al-ack{ font-size:13px; color:var(--sage); font-weight:600; background:var(--sage-light); padding:8px 13px; border-radius:10px; }
+  .mon-alert{ background:var(--red-light); color:var(--red); border-radius:var(--r); padding:12px 16px; font-size:13.5px; margin-bottom:0.9rem; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .mon-alert-time{ margin-left:auto; font-size:11px; opacity:0.7; }
+  #toastHost{ position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:2000; display:flex; flex-direction:column; gap:8px; align-items:center; pointer-events:none; }
+  .toast{ background:var(--ink); color:#fff; font-size:13.5px; font-weight:500; padding:12px 20px; border-radius:12px; box-shadow:0 8px 28px rgba(26,23,20,0.25); opacity:0; transform:translateY(12px); transition:all .28s cubic-bezier(.2,.8,.2,1); max-width:90vw; }
+  .toast.show{ opacity:1; transform:translateY(0); }
+  .toast-error{ background:var(--red); }
+  .toast-success{ background:var(--sage); }
+  .mem-row{ display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--border); }
+  .mem-row:last-child{ border-bottom:none; }
+  .mem-name{ font-size:14px; font-weight:500; }
+  .mem-email{ font-size:12px; color:var(--ink-faint); }
+  .mem-row .pick-role{ margin-left:auto; }
+  /* appointments */
+  .appt-card{ display:flex; align-items:flex-start; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.1rem 1.3rem; margin-bottom:0.8rem; }
+  .appt-card.appt-overdue{ border-color:var(--red-light); background:linear-gradient(0deg,var(--red-light),var(--white) 40%); }
+  .appt-ic{ font-size:22px; flex-shrink:0; line-height:1.4; }
+  .appt-main{ flex:1; }
+  .appt-title{ font-size:15px; font-weight:600; }
+  .appt-flag{ font-size:10px; background:var(--red-light); color:var(--red); padding:2px 8px; border-radius:20px; font-weight:600; text-transform:uppercase; letter-spacing:0.4px; margin-left:6px; }
+  .appt-meta{ font-size:12.5px; color:var(--ink-faint); margin-top:3px; }
+  .appt-note{ font-size:12.5px; color:var(--ink-muted); margin-top:5px; }
+  .appt-actions{ display:flex; align-items:center; gap:7px; align-self:center; flex-wrap:wrap; justify-content:flex-end; }
+  .appt-missed{ font-size:12.5px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink-muted); white-space:nowrap; }
+  .appt-missed:hover{ border-color:var(--gold); color:var(--gold); }
+  .appt-reopen{ font-size:12px; background:transparent; border:none; color:var(--ink-faint); }
+  .appt-reopen:hover{ color:var(--rust); }
+  .appt-edit{ font-size:12px; background:transparent; border:1.5px solid var(--border-strong); border-radius:9px; padding:6px 11px; color:var(--ink-muted); }
+  .appt-edit:hover{ border-color:var(--rust); color:var(--rust); }
+  .appt-del{ font-size:12px; background:transparent; border:none; color:var(--ink-faint); }
+  .appt-del:hover{ color:var(--red); }
+  .st-missed{ background:var(--gold-light); color:var(--gold); }
+  .appt-done{ font-size:12.5px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink); align-self:center; white-space:nowrap; }
+  .appt-done:hover{ border-color:var(--sage); color:var(--sage); }
+  /* SOS */
+  .sos-box{ background:linear-gradient(135deg,#fff,var(--red-light)); border:2px solid var(--red); border-radius:var(--r-lg); padding:1.4rem; margin-bottom:1.5rem; max-width:520px; }
+  .sos-head{ font-size:15px; font-weight:700; color:var(--red); margin-bottom:1rem; }
+  .sos-btns{ display:grid; grid-template-columns:1fr; gap:10px; }
+  .sos-btn{ display:flex; flex-direction:column; background:var(--white); border:1.5px solid var(--border); border-radius:14px; padding:13px 16px; text-decoration:none; color:var(--ink); transition:all .16s; }
+  .sos-btn:hover{ border-color:var(--red); transform:translateY(-1px); }
+  .sos-lbl{ font-size:15px; font-weight:600; }
+  .sos-sub{ font-size:12px; color:var(--ink-faint); margin-top:1px; }
+  .sos-amb{ background:var(--red); border-color:var(--red); }
+  .sos-amb .sos-lbl, .sos-amb .sos-sub{ color:#fff; }
+  .sos-alert{ width:100%; margin-top:12px; background:var(--ink); color:#fff; border:none; border-radius:12px; padding:12px; font-size:13.5px; font-weight:600; }
+  @media print{ .sos-box{ display:none; } }
+  /* insights */
+  .ins-box{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.3rem 1.4rem; margin-bottom:1.25rem; }
+  .ins-head{ display:flex; align-items:center; justify-content:space-between; font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:1rem; }
+  .ins-explain{ font-size:12px; font-weight:500; text-transform:none; letter-spacing:0; background:var(--ink); color:#fff; border:none; padding:6px 13px; border-radius:20px; }
+  .ins-item{ display:flex; gap:12px; padding:11px 0; border-bottom:1px solid var(--border); align-items:flex-start; }
+  .ins-item:last-of-type{ border-bottom:none; }
+  .ins-dot{ width:24px; height:24px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:700; color:#fff; }
+  .ins-good .ins-dot{ background:var(--sage); }
+  .ins-watch .ins-dot{ background:var(--gold); }
+  .ins-urgent .ins-dot{ background:var(--red); }
+  .ins-title{ font-size:14px; font-weight:600; }
+  .ins-detail{ font-size:12.5px; color:var(--ink-muted); margin-top:2px; line-height:1.5; }
+  .ins-ai{ background:var(--cream); border-radius:var(--r); padding:12px 15px; font-size:13.5px; line-height:1.6; color:var(--ink); margin-top:1rem; }
+  /* onboarding */
+  .onb-card{ max-width:460px; max-height:88vh; overflow-y:auto; }
+  .onb-progress{ height:4px; background:var(--cream-darker); border-radius:3px; margin-bottom:1.25rem; overflow:hidden; }
+  .onb-bar{ height:100%; background:var(--rust); border-radius:3px; transition:width .3s; width:33%; }
+  /* check-in */
+  .checkin-box{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.5rem; }
+  .ci-q{ font-family:var(--font-display); font-size:19px; margin-bottom:1rem; }
+  .ci-opts{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .ci-opt{ background:var(--cream); border:2px solid transparent; border-radius:16px; padding:18px 8px; font-size:14px; font-weight:600; color:var(--ink-muted); transition:all .16s; }
+  .ci-opt:hover{ border-color:var(--rust); color:var(--rust); }
+  .ci-emo{ display:block; font-size:30px; margin-bottom:6px; }
+  .ci-done{ font-size:16px; }
+  .ci-note{ background:var(--cream); border-radius:var(--r); padding:11px 14px; margin-top:0.8rem; font-style:italic; color:var(--ink-muted); font-size:14px; }
+  .ci-change{ margin-top:1rem; font-size:13px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:8px 14px; color:var(--ink); }
+  /* documents */
+  .tab-n{ font-size:11px; opacity:0.6; margin-left:3px; }
+  .doc-src{ font-size:11px; color:var(--ink-faint); }
+  .doc-btn{ padding:7px 13px !important; font-size:12.5px !important; text-decoration:none; white-space:nowrap; }
+  .doc-row{ display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.2rem; margin-bottom:0.7rem; }
+  .doc-ic{ font-size:22px; }
+  .doc-title{ font-size:14.5px; font-weight:600; }
+  .doc-meta{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+  .det-group{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.3rem 1.4rem; margin-bottom:1rem; }
+  .det-group h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.9rem; }
+  .det-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1rem 1.5rem; }
+  .det-k{ font-size:11.5px; color:var(--ink-faint); }
+  .det-v{ font-size:14.5px; font-weight:500; margin-top:2px; }
+  @media(max-width:860px){ .det-grid{ grid-template-columns:1fr 1fr; } }
+  .slot-when{ font-weight:400; text-transform:none; letter-spacing:0; color:var(--ink-faint); margin-left:8px; font-size:11.5px; }
+  .med-time-badge{ font-size:11px; background:var(--gold-light); color:#7a5a08; padding:2px 8px; border-radius:20px; margin-left:4px; }
+  .med-edit{ font-size:12px; color:var(--ink-muted); background:transparent; border:1.5px solid var(--border-strong); border-radius:9px; padding:5px 11px; margin-right:6px; }
+  .med-edit:hover{ border-color:var(--rust); color:var(--rust); }
+  .hab-box{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.4rem; }
+  .hab-head{ display:flex; justify-content:space-between; align-items:center; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:1rem; }
+  .hab-streak{ background:var(--gold-light); color:#7a5a08; padding:3px 10px; border-radius:20px; text-transform:none; letter-spacing:0; font-size:11.5px; }
+  .hab-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .hab{ position:relative; background:var(--cream); border:2px solid transparent; border-radius:16px; padding:16px 10px; text-align:center; transition:all .16s; }
+  .hab:hover{ border-color:var(--rust); }
+  .hab.on{ background:var(--sage-light); border-color:var(--sage); }
+  .hab-ic{ display:block; font-size:26px; margin-bottom:5px; }
+  .hab-l{ font-size:12.5px; font-weight:600; color:var(--ink-muted); }
+  .hab.on .hab-l{ color:var(--sage); }
+  .hab-tick{ position:absolute; top:8px; right:10px; color:var(--sage); font-weight:700; }
+  .hab-water{ margin-top:1.2rem; font-size:12.5px; color:var(--ink-faint); }
+  .water-row{ display:flex; gap:6px; margin-top:7px; flex-wrap:wrap; }
+  .water{ width:34px; height:34px; border-radius:50%; border:1.5px solid var(--border); background:var(--white); font-size:12.5px; color:var(--ink-muted); }
+  .water.on{ background:var(--blue-light); border-color:var(--blue); color:var(--blue); font-weight:600; }
+  .hab-saved{ font-weight:400; text-transform:none; letter-spacing:0; font-size:11.5px; color:var(--ink-faint); }
+  .hab-readonly{ background:var(--blue-light); color:var(--blue); font-size:12.5px; padding:9px 13px; border-radius:var(--r); margin-bottom:1rem; }
+  .hab-locked{ opacity:0.75; cursor:default !important; }
+  .hab-locked:hover{ border-color:transparent !important; }
+  .water:disabled{ opacity:0.75; cursor:default; }
+  .hab-actions{ display:flex; align-items:center; gap:12px; margin-top:1.2rem; }
+  .hab-actions .btn-primary:disabled{ opacity:0.45; }
+  .hab-unsaved{ font-size:12px; color:var(--gold); font-weight:500; }
+  .wh-title{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.8rem; }
+  .wh-table{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
+  .wh-row{ display:grid; grid-template-columns:1.4fr .7fr .7fr 1fr .8fr .7fr 1.2fr; gap:8px; padding:11px 1.2rem; border-bottom:1px solid var(--border); font-size:13px; align-items:center; }
+  .wh-row:last-child{ border-bottom:none; }
+  .wh-head{ background:var(--cream); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); }
+  .wh-yes{ color:var(--sage); font-weight:700; }
+  .wh-when{ font-size:11.5px; color:var(--ink-faint); }
+  @media(max-width:860px){ .wh-row{ grid-template-columns:1fr .5fr .5fr .5fr .5fr .5fr; } .wh-row>div:last-child{ display:none; } }
+  .vit-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:0.5rem; }
+  .vit-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.3rem; }
+  .vit-l{ font-size:12px; color:var(--ink-faint); }
+  .vit-v{ font-family:var(--font-display); font-size:30px; letter-spacing:-1px; margin-top:3px; }
+  .vit-u{ font-size:12px; font-family:var(--font-body); color:var(--ink-faint); }
+  .vit-ok{ color:var(--sage); } .vit-out{ color:var(--red); }
+  .vit-spark{ margin-top:0.5rem; opacity:0.85; }
+  .vit-row{ grid-template-columns:1.4fr 1fr 1.2fr .8fr .7fr 1fr !important; }
+  .tl-date-head{ font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin:1.5rem 0 0.6rem; }
+  .tl-item{ display:flex; gap:13px; align-items:flex-start; background:var(--white); border:1px solid var(--border); border-left:3px solid var(--border-strong); border-radius:var(--r); padding:0.9rem 1.1rem; margin-bottom:0.6rem; }
+  .tl-prescription{ border-left-color:var(--rust); }
+  .tl-report{ border-left-color:var(--blue); }
+  .tl-appointment{ border-left-color:var(--gold); }
+  .tl-vital{ border-left-color:var(--sage); }
+  .tl-checkin{ border-left-color:var(--ink-faint); }
+  .tl-ic{ font-size:17px; line-height:1.4; }
+  .tl-body{ flex:1; }
+  .tl-t{ font-size:14px; font-weight:600; }
+  .tl-kind{ font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); font-weight:600; margin-left:5px; }
+  .tl-d{ font-size:12.5px; color:var(--ink-muted); margin-top:2px; }
+  .tl-open{ padding:6px 12px !important; font-size:12px !important; text-decoration:none; align-self:center; }
+  @media(max-width:860px){ .vit-grid{ grid-template-columns:1fr; } }
+  .food-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:1rem; }
+  .food-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.3rem; }
+  .food-card h4{ font-family:var(--font-display); font-size:16px; margin-bottom:0.6rem; }
+  .food-card ul, .food-tips ul, .food-avoid ul{ margin:0; padding-left:1.1rem; }
+  .food-card li{ font-size:13.5px; color:var(--ink-muted); margin-bottom:4px; }
+  .food-tips, .food-avoid{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.3rem; margin-bottom:1rem; }
+  .food-tips h4, .food-avoid h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.7rem; }
+  .food-avoid{ border-color:var(--red-light); }
+  .food-tips li, .food-avoid li{ font-size:13.5px; color:var(--ink-muted); margin-bottom:5px; }
+  @media(max-width:860px){ .hab-grid{ grid-template-columns:1fr 1fr; } .food-grid{ grid-template-columns:1fr; } }
+  .ops-alerts{ margin-bottom:1.5rem; }
+  .ops-alerts h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.7rem; }
+  .ops-card{ display:flex; gap:14px; align-items:flex-start; background:var(--white); border:1px solid var(--border); border-left:4px solid var(--gold); border-radius:var(--r-lg); padding:1.1rem 1.3rem; margin-bottom:0.8rem; }
+  .ops-card.ops-confirmed{ border-left-color:var(--sage); }
+  .ops-card.ops-done{ border-left-color:var(--border-strong); opacity:0.65; }
+  .ops-card.ops-cancelled{ border-left-color:var(--red-light); opacity:0.55; }
+  .ops-main{ flex:1; }
+  .ops-title{ font-size:15px; font-weight:600; text-transform:capitalize; }
+  .ops-meta{ font-size:12.5px; color:var(--ink-faint); margin-top:3px; }
+  .ops-note{ font-size:12.5px; color:var(--ink-muted); margin-top:4px; }
+  .ops-phones{ display:flex; gap:7px; flex-wrap:wrap; margin-top:8px; }
+  .ops-call{ font-size:12px; background:var(--cream); border:1px solid var(--border); padding:4px 11px; border-radius:20px; color:var(--ink); text-decoration:none; }
+  .ops-call:hover{ border-color:var(--rust); color:var(--rust); }
+  .ops-actions{ display:flex; flex-direction:column; gap:7px; align-items:flex-end; }
+  .ops-btn{ padding:8px 15px !important; font-size:12.5px !important; white-space:nowrap; }
+  .ops-cancel{ font-size:12px; background:transparent; border:none; color:var(--ink-faint); }
+  .ops-cancel:hover{ color:var(--red); }
+  .doc-hint{ font-size:12.5px; color:var(--ink-muted); background:var(--cream); border-radius:10px; padding:9px 12px; margin:0.6rem 0 0.2rem; }
+  .file-pick{ display:flex; flex-direction:column; gap:2px; border:2px dashed var(--border-strong); border-radius:var(--r); padding:14px 16px; cursor:pointer; background:var(--white); transition:all .16s; }
+  .file-pick:hover{ border-color:var(--rust); background:var(--rust-light); }
+  .file-pick-hint{ font-size:11.5px; color:var(--ink-faint); }
+  .msg-tools{ display:flex; gap:9px; align-items:center; margin-top:0.8rem; flex-wrap:wrap; }
+  .msg-tool{ font-size:13px; background:transparent; border:1.5px solid var(--border-strong); border-radius:20px; padding:8px 14px; color:var(--ink-muted); cursor:pointer; }
+  .msg-tool:hover{ border-color:var(--rust); color:var(--rust); }
+  .msg-tool.rec-on{ background:var(--red); border-color:var(--red); color:#fff; }
+  .rec-timer{ font-size:13px; color:var(--red); font-weight:600; font-variant-numeric:tabular-nums; }
+  .rec-prev{ display:flex; gap:9px; align-items:center; margin-top:0.8rem; flex-wrap:wrap; }
+  .rec-prev audio{ height:36px; }
+  .rec-send{ padding:8px 15px !important; font-size:13px !important; }
+  .msg-audio{ width:100%; max-width:320px; height:38px; margin-top:0.6rem; }
+  .msg-img{ max-width:260px; border-radius:var(--r); margin-top:0.6rem; display:block; }
+  .msg-secs{ font-size:11px; color:var(--ink-faint); margin-left:6px; }
+  .msg-compose{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; }
+  /* dependent mode: hide family-management surfaces */
+  /* accessible text scaling from the care profile */
+  body.ts-large{ font-size:17px; }
+  body.ts-large .psub, body.ts-large .feed-text, body.ts-large .med-name{ font-size:16px; }
+  body.ts-large .side-btn{ font-size:15px; }
+  body.ts-xlarge{ font-size:19px; }
+  body.ts-xlarge .psub, body.ts-xlarge .feed-text, body.ts-xlarge .med-name{ font-size:18px; }
+  body.ts-xlarge .side-btn{ font-size:16.5px; }
+  body.ts-xlarge h1.pt{ font-size:36px; }
+  @media(max-width:860px){ .ci-opts{ grid-template-columns:1fr 1fr; } }
+  .layout{ display:grid; grid-template-columns:230px 1fr; min-height:calc(100vh - 60px); }
+  .side{ border-right:1px solid var(--border); padding:1.5rem 1rem; }
+  .side-sec{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.8px; color:var(--ink-faint); margin:1.2rem 0 0.5rem 0.6rem; }
+  .side-sec:first-child{ margin-top:0; }
+  .side-btn{ display:flex; align-items:center; gap:10px; width:100%; font-size:13.5px; color:var(--ink-muted); background:transparent; border:none; padding:9px 11px; border-radius:10px; text-align:left; transition:all .16s; }
+  .side-btn svg{ width:16px; height:16px; stroke:currentColor; flex-shrink:0; }
+  .side-btn:hover{ background:var(--cream-dark); color:var(--ink); }
+  .side-btn.active{ background:var(--ink); color:white; }
+  .side-badge{ margin-left:auto; font-size:10px; background:var(--rust-light); color:var(--rust-dark); padding:1px 7px; border-radius:20px; }
+  .side-btn.active .side-badge{ background:rgba(255,255,255,0.2); color:white; }
+  .main{ padding:2rem 2.25rem; max-width:1000px; }
+  .view{ display:none; animation:fade .35s ease; }
+  .view.active{ display:block; }
+  @keyframes fade{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+  .page-eyebrow{ font-size:11px; font-weight:600; letter-spacing:1.3px; text-transform:uppercase; color:var(--rust); margin-bottom:0.6rem; }
+  h1.pt{ font-family:var(--font-display); font-size:32px; font-weight:400; letter-spacing:-0.8px; margin-bottom:0.5rem; }
+  h1.pt em{ font-style:italic; color:var(--rust); }
+  .psub{ font-size:15px; color:var(--ink-muted); margin-bottom:1.75rem; max-width:560px; }
+  .score-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
+  .score-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem; }
+  .score-card .sl{ font-size:12px; color:var(--ink-faint); font-weight:500; margin-bottom:0.5rem; }
+  .score-val{ font-family:var(--font-display); font-size:30px; letter-spacing:-1px; }
+  .score-val small{ font-size:13px; font-family:var(--font-body); color:var(--ink-faint); }
+  .score-bar{ height:5px; border-radius:3px; background:var(--cream-darker); margin-top:0.7rem; overflow:hidden; }
+  .score-fill{ height:100%; border-radius:3px; }
+  .score-trend{ font-size:11.5px; margin-top:6px; }
+  .tup{ color:var(--sage); } .tdown{ color:var(--red); } .twatch{ color:var(--gold); }
+  .vault-head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; }
+  .btn-primary{ font-size:14px; font-weight:500; color:white; background:var(--rust); border:none; padding:11px 20px; border-radius:var(--r); display:inline-flex; align-items:center; gap:7px; transition:all .18s; }
+  .btn-primary:hover{ background:var(--rust-dark); }
+  .btn-primary svg{ width:16px; height:16px; }
+  .btn-out{ font-size:14px; font-weight:500; color:var(--ink); background:transparent; border:1.5px solid var(--border-strong); padding:10px 18px; border-radius:var(--r); }
+  .tl-group{ margin-bottom:1.75rem; }
+  .tl-date{ display:flex; align-items:center; gap:10px; margin-bottom:0.9rem; }
+  .tl-date .dot{ width:9px; height:9px; border-radius:50%; background:var(--rust); }
+  .tl-date h3{ font-family:var(--font-display); font-size:18px; font-weight:500; }
+  .tl-date .count{ font-size:12px; color:var(--ink-faint); }
+  .report-card{ display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.1rem 1.3rem; margin-bottom:0.7rem; transition:all .18s; cursor:pointer; }
+  .report-card:hover{ border-color:var(--rust); transform:translateX(3px); box-shadow:var(--shadow-sm); }
+  .rc-ic{ width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:var(--rust-light); }
+  .rc-info{ flex:1; }
+  .rc-title{ font-size:15px; font-weight:600; }
+  .rc-meta{ font-size:12.5px; color:var(--ink-faint); margin-top:2px; }
+  .rc-flags{ display:flex; gap:6px; align-items:center; }
+  .flag{ font-size:11px; padding:3px 9px; border-radius:20px; font-weight:500; }
+  .flag-ok{ background:var(--sage-light); color:var(--sage); }
+  .flag-watch{ background:var(--gold-light); color:var(--gold); }
+  .flag-high{ background:var(--red-light); color:var(--red); }
+  .modal-bg{ display:none; position:fixed; inset:0; background:rgba(26,23,20,0.5); z-index:500; align-items:center; justify-content:center; padding:1.5rem; }
+  .modal-bg.open{ display:flex; }
+  .modal{ background:var(--cream); border-radius:var(--r-xl); padding:2rem; max-width:520px; width:100%; box-shadow:0 30px 80px rgba(0,0,0,0.3); }
+  .modal h2{ font-family:var(--font-display); font-size:24px; font-weight:400; margin-bottom:0.4rem; }
+  .modal .msub{ font-size:14px; color:var(--ink-muted); margin-bottom:1.5rem; }
+  .drop{ border:2px dashed var(--border-strong); border-radius:var(--r-lg); padding:2.5rem 1.5rem; text-align:center; background:var(--white); transition:all .18s; cursor:pointer; }
+  .drop:hover,.drop.drag{ border-color:var(--rust); background:var(--rust-light); }
+  .drop svg{ width:40px; height:40px; stroke:var(--ink-faint); margin-bottom:0.8rem; }
+  .drop h4{ font-size:15px; font-weight:600; margin-bottom:4px; }
+  .drop p{ font-size:12.5px; color:var(--ink-faint); }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:9px; margin-top:1.5rem; }
+  .file-chip{ display:flex; align-items:center; gap:9px; background:var(--white); border:1px solid var(--border); border-radius:var(--r); padding:10px 13px; margin-top:0.8rem; font-size:13px; }
+  .proc{ text-align:center; padding:1.5rem 0; }
+  .spinner{ width:38px; height:38px; border:3px solid var(--cream-darker); border-top-color:var(--rust); border-radius:50%; margin:0 auto 1rem; animation:spin 0.8s linear infinite; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .err-box{ background:var(--red-light); color:var(--red); font-size:13px; padding:11px 14px; border-radius:var(--r); margin-top:0.9rem; }
+  .back-btn{ display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--ink-muted); background:transparent; border:none; margin-bottom:1rem; }
+  .back-btn:hover{ color:var(--rust); }
+  .an-box{ border-radius:var(--r-lg); padding:1.4rem 1.5rem; margin-bottom:1.25rem; border:1px solid var(--border); background:var(--white); border-left:5px solid var(--sage); }
+  .an-lvl-watch{ border-left-color:var(--gold); background:linear-gradient(90deg,var(--gold-light),var(--white) 55%); }
+  .an-lvl-urgent{ border-left-color:var(--red); background:linear-gradient(90deg,var(--red-light),var(--white) 55%); }
+  .an-head{ font-family:var(--font-display); font-size:19px; line-height:1.4; display:flex; gap:10px; align-items:flex-start; }
+  .an-dot{ width:9px; height:9px; border-radius:50%; background:var(--sage); flex-shrink:0; margin-top:9px; }
+  .an-lvl-watch .an-dot{ background:var(--gold); } .an-lvl-urgent .an-dot{ background:var(--red); }
+  .an-chips{ display:flex; flex-wrap:wrap; gap:7px; margin-top:0.9rem; }
+  .an-chip{ font-size:12.5px; background:var(--white); border:1px solid var(--border); border-radius:20px; padding:5px 12px; }
+  .an-chip.an-marked{ border-color:var(--red); color:var(--red); }
+  .an-chip.an-notable{ border-color:var(--gold); color:#7a5a08; }
+  .an-deg{ color:var(--ink-faint); font-size:11px; }
+  .an-advice{ font-size:14.5px; line-height:1.6; margin-top:1rem; }
+  .an-meta{ font-size:12px; color:var(--ink-faint); margin-top:0.6rem; }
+  .an-explain{ font-size:12.5px; background:var(--ink); color:#fff; border:none; padding:8px 15px; border-radius:20px; margin-top:1rem; }
+  .an-ai{ background:var(--cream); border-radius:var(--r); padding:12px 15px; font-size:13.5px; line-height:1.65; margin-top:0.9rem; }
+  .an-disc{ font-size:11.5px; color:var(--ink-faint); margin-top:0.9rem; line-height:1.5; }
+  .param-table{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; }
+  .param-row{ display:grid; grid-template-columns:2fr 1fr 1.3fr 0.8fr; gap:1rem; padding:12px 1.3rem; border-bottom:1px solid var(--border); align-items:center; font-size:13.5px; }
+  .param-row:last-child{ border-bottom:none; }
+  .param-row.head{ background:var(--cream); font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); }
+  .param-name{ font-weight:500; }
+  .param-val{ font-weight:600; font-family:var(--font-display); font-size:16px; }
+  .param-status{ display:inline-block; font-size:11px; padding:2px 9px; border-radius:20px; font-weight:500; }
+  .cmp-picker{ display:grid; grid-template-columns:1fr auto 1fr; gap:1rem; align-items:center; margin-bottom:1.75rem; }
+  .cmp-sel{ background:var(--white); border:1.5px solid var(--border); border-radius:var(--r-lg); padding:1.1rem 1.3rem; }
+  .cmp-sel label{ font-size:11px; font-weight:600; text-transform:uppercase; color:var(--ink-faint); }
+  .cmp-sel select{ width:100%; border:none; background:transparent; font-family:var(--font-display); font-size:16px; margin-top:5px; color:var(--ink); cursor:pointer; -webkit-appearance:none; }
+  .cmp-sel select:focus{ outline:none; }
+  .cmp-vs{ font-family:var(--font-display); font-style:italic; font-size:18px; color:var(--rust); }
+  .rng-src{ font-size:10px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.4px; }
+  .cmp-note{ background:var(--gold-light); border:1px solid rgba(184,134,11,0.25); border-radius:var(--r); padding:11px 14px; font-size:12.5px; color:#7a5a08; margin:1.25rem 0 1rem; }
+  .cmp-only{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.1rem 1.3rem; margin-bottom:0.8rem; }
+  .cmp-only h4{ font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); margin-bottom:0.7rem; }
+  .cmp-only-row{ display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--border); font-size:13.5px; }
+  .cmp-only-row:last-child{ border-bottom:none; }
+  .cmp-ai{ background:var(--ink); border-radius:var(--r-lg); padding:1.5rem; margin-bottom:1.5rem; }
+  .cmp-ai h4{ font-size:14px; font-weight:600; color:white; margin-bottom:0.7rem; }
+  .cmp-ai .ai-badge{ font-size:10px; background:var(--rust); color:white; padding:2px 8px; border-radius:20px; margin-left:6px; }
+  .cmp-ai p{ font-size:13.5px; color:rgba(255,255,255,0.75); line-height:1.7; }
+  .cmp-ai .btn-gen{ font-size:12.5px; color:white; background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.2); padding:8px 14px; border-radius:10px; margin-top:0.9rem; }
+  .cmp-row{ display:grid; grid-template-columns:1.5fr 1fr 1fr 1fr; gap:0.8rem; padding:12px 1.3rem; border-bottom:1px solid var(--border); align-items:center; font-size:13px; background:var(--white); }
+  .cmp-row.head{ background:var(--cream); font-size:10.5px; font-weight:600; text-transform:uppercase; color:var(--ink-faint); }
+  .cmp-change{ font-weight:600; font-size:12.5px; }
+  .trend-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:1.25rem; }
+  .trend-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.4rem; }
+  .trend-head{ display:flex; align-items:center; justify-content:space-between; }
+  .trend-head h4{ font-size:14px; font-weight:600; }
+  .trend-latest{ font-family:var(--font-display); font-size:20px; }
+  .trend-unit{ font-size:11px; color:var(--ink-faint); }
+  .chat-box{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); height:440px; display:flex; flex-direction:column; overflow:hidden; }
+  .chat-msgs{ flex:1; overflow-y:auto; padding:1.25rem; display:flex; flex-direction:column; gap:0.9rem; }
+  .msg{ max-width:78%; padding:11px 15px; border-radius:16px; font-size:13.5px; line-height:1.6; }
+  .msg.user{ align-self:flex-end; background:var(--rust); color:white; border-bottom-right-radius:5px; }
+  .msg.bot{ align-self:flex-start; background:var(--cream); border-bottom-left-radius:5px; }
+  .chat-input-row{ display:flex; gap:9px; padding:1rem; border-top:1px solid var(--border); }
+  .chat-input{ flex:1; padding:11px 14px; border:1.5px solid var(--border); border-radius:var(--r); font-size:14px; background:var(--cream); }
+  .chat-input:focus{ outline:none; border-color:var(--rust); }
+  .chat-send{ background:var(--rust); color:white; border:none; border-radius:var(--r); padding:0 16px; }
+  .chat-suggest{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:1rem; }
+  .sg{ font-size:12px; background:var(--white); border:1px solid var(--border); padding:6px 12px; border-radius:20px; color:var(--ink-muted); }
+  .sg:hover{ border-color:var(--rust); color:var(--rust); }
+  .disclaimer{ background:var(--gold-light); border:1px solid rgba(184,134,11,0.25); border-radius:var(--r); padding:12px 15px; font-size:12.5px; color:#7a5a08; margin-top:1.5rem; }
+  .dl-label{ display:block; font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); margin:0.9rem 0 0.4rem; }
+  .chip-row{ display:flex; gap:7px; flex-wrap:wrap; margin-bottom:0.3rem; }
+  .dchip{ font-size:13px; padding:8px 14px; border-radius:20px; border:1.5px solid var(--border); background:var(--white); color:var(--ink-muted); transition:all .16s; }
+  .dchip:hover{ border-color:var(--rust); }
+  .dchip.sel{ background:var(--rust); color:white; border-color:var(--rust); }
+  .med-slot{ margin-bottom:1.5rem; }
+  .med-slot-head{ display:flex; align-items:center; gap:8px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); margin-bottom:0.6rem; }
+  .med-item{ display:flex; align-items:center; gap:12px; background:var(--white); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px; margin-bottom:7px; }
+  .med-check{ width:26px; height:26px; border-radius:50%; border:2px solid var(--border-strong); flex-shrink:0; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .16s; }
+  .med-check.on{ background:var(--sage); border-color:var(--sage); }
+  .med-check.on svg{ stroke:white; }
+  .med-check svg{ width:14px; height:14px; stroke:transparent; }
+  .med-name{ font-size:14px; font-weight:500; }
+  .med-name.done{ text-decoration:line-through; color:var(--ink-faint); }
+  .med-sub{ font-size:12px; color:var(--ink-faint); }
+  .med-row{ display:flex; align-items:center; justify-content:space-between; background:var(--white); border:1px solid var(--border); border-radius:var(--r); padding:12px 14px; margin-bottom:7px; }
+  .med-del{ font-size:12px; color:var(--red); background:transparent; border:none; }
+  .slot-badge{ font-size:10px; background:var(--cream-dark); color:var(--ink-muted); padding:2px 8px; border-radius:20px; margin-left:5px; }
+  .feed-item{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.25rem; margin-bottom:0.9rem; }
+  .feed-date{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--rust); margin-bottom:0.5rem; }
+  .feed-text{ font-size:14px; line-height:1.65; color:var(--ink); }
+  .feed-meta{ display:flex; gap:8px; flex-wrap:wrap; margin-top:0.8rem; }
+  .feed-tag{ font-size:11px; background:var(--cream); border:1px solid var(--border); padding:3px 9px; border-radius:20px; color:var(--ink-muted); }
+  .em-card{ background:var(--white); border:2px solid var(--ink); border-radius:var(--r-lg); padding:1.75rem; max-width:520px; }
+  .em-head{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid var(--ink); padding-bottom:1rem; margin-bottom:1rem; }
+  .em-title{ font-family:var(--font-display); font-size:20px; }
+  .em-blood{ background:var(--red); color:white; font-weight:600; font-size:15px; padding:5px 14px; border-radius:10px; }
+  .em-row{ padding:9px 0; border-bottom:1px solid var(--border); }
+  .em-row:last-child{ border-bottom:none; }
+  .em-k{ font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--ink-faint); }
+  .em-v{ font-size:14px; margin-top:2px; }
+  @media print{ nav,.side,.page-eyebrow,.psub,.btn-out{ display:none!important; } .layout{ display:block; } .em-card{ border-color:#000; } }
+  /* monitor */
+  .mon-grid{ display:grid; grid-template-columns:1.3fr 1fr; gap:1.25rem; margin-bottom:1.25rem; }
+  .mon-hero{ background:var(--ink); border-radius:var(--r-lg); padding:1.5rem; color:white; }
+  .mon-hero .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:rgba(255,255,255,0.5); margin-bottom:0.5rem; }
+  .mon-hero .upd{ font-size:15px; line-height:1.6; color:rgba(255,255,255,0.9); }
+  .mon-mood{ display:inline-block; margin-top:0.9rem; font-size:12px; background:rgba(255,255,255,0.12); padding:4px 12px; border-radius:20px; }
+  .mon-tiles{ display:flex; flex-direction:column; gap:0.9rem; }
+  .mon-tile{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.1rem 1.3rem; display:flex; align-items:center; gap:14px; }
+  .mon-ic{ width:42px; height:42px; border-radius:11px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .mon-tile .k{ font-size:12px; color:var(--ink-faint); }
+  .mon-tile .v{ font-family:var(--font-display); font-size:22px; }
+  .mon-row{ display:grid; grid-template-columns:repeat(3,1fr); gap:1rem; margin-bottom:1.25rem; }
+  .mon-vital{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem; }
+  .mon-vital .k{ font-size:12px; color:var(--ink-faint); }
+  .mon-vital .v{ font-family:var(--font-display); font-size:26px; margin-top:3px; }
+  /* care team */
+  .team-card{ display:flex; align-items:center; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.4rem; margin-bottom:0.8rem; }
+  .team-av{ width:48px; height:48px; border-radius:50%; background:var(--rust-light); color:var(--rust); display:flex; align-items:center; justify-content:center; font-family:var(--font-display); font-size:19px; flex-shrink:0; }
+  .team-name{ font-size:15px; font-weight:600; }
+  .team-role{ font-size:12.5px; color:var(--ink-faint); text-transform:capitalize; }
+  .team-rating{ margin-left:auto; text-align:right; }
+  .team-rating .r{ font-weight:600; font-size:14px; }
+  .team-rating .r span{ color:var(--gold); }
+  .team-since{ font-size:11px; color:var(--ink-faint); }
+  .grid-book{ display:grid; grid-template-columns:repeat(4,1fr); gap:0.9rem; }
+  .book-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem; text-align:center; cursor:pointer; transition:all .18s; }
+  .book-card:hover{ border-color:var(--rust); transform:translateY(-3px); box-shadow:var(--shadow-sm); }
+  .book-ic{ width:44px; height:44px; border-radius:12px; background:var(--cream); display:flex; align-items:center; justify-content:center; margin:0 auto 0.7rem; }
+  .book-card h4{ font-size:13.5px; font-weight:600; }
+  .book-card p{ font-size:11.5px; color:var(--ink-faint); margin-top:2px; }
+  .req-row{ display:flex; align-items:center; gap:12px; background:var(--white); border:1px solid var(--border); border-radius:var(--r); padding:11px 14px; margin-bottom:7px; font-size:13px; }
+  .req-status{ margin-left:auto; font-size:11px; padding:3px 10px; border-radius:20px; font-weight:500; text-transform:capitalize; }
+  .st-pending{ background:var(--gold-light); color:var(--gold); }
+  .st-confirmed{ background:var(--sage-light); color:var(--sage); }
+  .st-done{ background:var(--cream-dark); color:var(--ink-muted); }
+  /* activities */
+  .act-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:1.25rem; }
+  .act-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); overflow:hidden; transition:all .18s; }
+  .act-card:hover{ transform:translateY(-3px); box-shadow:var(--shadow-md); }
+  .act-thumb{ position:relative; aspect-ratio:16/9; background:var(--cream-darker); cursor:pointer; overflow:hidden; }
+  .act-thumb img{ width:100%; height:100%; object-fit:cover; }
+  .act-play{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; }
+  .act-play span{ width:54px; height:54px; border-radius:50%; background:rgba(200,75,47,0.92); display:flex; align-items:center; justify-content:center; }
+  .act-play svg{ width:22px; height:22px; fill:white; margin-left:3px; }
+  .act-body{ padding:1.1rem 1.3rem; }
+  .act-cat{ font-size:10.5px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--rust); }
+  .act-title{ font-size:14.5px; font-weight:600; margin:3px 0 4px; }
+  .act-desc{ font-size:12.5px; color:var(--ink-muted); line-height:1.55; }
+  .act-meta{ display:flex; gap:7px; margin-top:0.7rem; }
+  .act-tag{ font-size:11px; background:var(--cream); border:1px solid var(--border); padding:2px 9px; border-radius:20px; color:var(--ink-muted); }
+  .act-frame{ aspect-ratio:16/9; width:100%; border:none; }
+  /* get care */
+  .gc-concerns{ display:grid; grid-template-columns:repeat(4,1fr); gap:0.8rem; }
+  .gc-concern{ background:var(--white); border:1.5px solid var(--border); border-radius:var(--r); padding:1rem 1.1rem; text-align:left; font-size:13.5px; font-weight:500; color:var(--ink); transition:all .16s; line-height:1.4; }
+  .gc-concern:hover{ border-color:var(--rust); background:var(--rust-light); transform:translateY(-2px); }
+  .gc-summary{ background:var(--ink); color:white; border-radius:var(--r-lg); padding:1.3rem 1.5rem; font-size:15px; line-height:1.6; margin-bottom:1.5rem; }
+  .gc-rec{ display:flex; align-items:flex-start; gap:14px; background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.3rem 1.4rem; margin-bottom:0.9rem; }
+  .gc-rec-ic{ width:46px; height:46px; border-radius:12px; background:var(--rust-light); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .gc-rec-ic svg{ width:22px; height:22px; stroke:var(--rust); }
+  .gc-rec-body{ flex:1; }
+  .gc-rec-title{ font-size:15.5px; font-weight:600; }
+  .gc-rec-price{ font-size:12px; color:var(--rust); font-weight:500; }
+  .gc-rec-why{ font-size:13px; color:var(--ink-muted); margin-top:5px; line-height:1.55; }
+  .gc-rec-book{ font-size:13px; font-weight:500; background:var(--rust); color:white; border:none; padding:9px 18px; border-radius:10px; white-space:nowrap; align-self:center; transition:background .18s; }
+  .gc-rec-book:hover{ background:var(--rust-dark); }
+  .gc-rec-main{ flex:1; }
+  .gc-book-btn{ align-self:center; padding:9px 18px !important; font-size:13px !important; white-space:nowrap; }
+  .gc-sum-box{ background:var(--ink); color:white; border-radius:var(--r-lg); padding:1.3rem 1.5rem; font-size:15px; line-height:1.6; margin-bottom:1.5rem; }
+  .gc-booked{ background:var(--sage-light); color:var(--sage); border-radius:var(--r); padding:12px 15px; font-size:13.5px; font-weight:500; margin-bottom:1rem; }
+  @media(max-width:860px){ .gc-concerns{ grid-template-columns:1fr 1fr; } .grid-book{ grid-template-columns:1fr 1fr; } .act-grid,.mon-grid,.mon-row{ grid-template-columns:1fr; } }
+  @media(max-width:860px){
+    .layout{ grid-template-columns:1fr; }
+    .side{ display:none; }
+    .score-row,.trend-grid{ grid-template-columns:1fr 1fr; }
+    .main{ padding:1.5rem 1.25rem; }
+    .cmp-picker{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">
+    <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 21.7C5.8 17.5 2 13.4 2 9.5 2 6.4 4.4 4 7.5 4c1.8 0 3.5.9 4.5 2.3C13 4.9 14.7 4 16.5 4 19.6 4 22 6.4 22 9.5c0 3.9-3.8 8-10 12.2z"/></svg></div>
+    <span class="logo-name">Parent<span>First</span></span>
+    <span class="logo-tag">Health Vault</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:10px;">
+    <div class="parent-pick" id="parentPick" onclick="toggleParentMenu(event)" style="cursor:pointer;">
+      <span class="pp-av" id="ppAv">-</span> <span id="ppName">Loading...</span>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
+      <div class="pick-menu" id="parentMenu"></div>
+    </div>
+    <span class="ai-pill" id="aiPill">AI: checking...</span>
+    <div class="user-btn" id="userBtn" onclick="toggleUserMenu(event)">
+      <span class="user-av" id="userAv">-</span>
+      <div class="pick-menu" id="userMenu" style="right:0;left:auto;"></div>
+    </div>
+  </div>
+</nav>
+<!-- LOGIN OVERLAY -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-card">
+    <div class="logo" style="justify-content:center;margin-bottom:1.5rem;">
+      <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 21.7C5.8 17.5 2 13.4 2 9.5 2 6.4 4.4 4 7.5 4c1.8 0 3.5.9 4.5 2.3C13 4.9 14.7 4 16.5 4 19.6 4 22 6.4 22 9.5c0 3.9-3.8 8-10 12.2z"/></svg></div>
+      <span class="logo-name">Parent<span>First</span></span>
+    </div>
+    <h2 id="authTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;text-align:center;margin-bottom:0.3rem;">Welcome back</h2>
+    <p class="msub" style="text-align:center;" id="authSub">Sign in to your family's care space.</p>
+    <div id="authNameWrap" style="display:none;">
+      <label class="dl-label">Your name</label>
+      <input class="chat-input" id="authName" placeholder="Dhanshree" style="background:var(--white);width:100%;">
+      <label class="dl-label">I am…</label>
+      <div class="chip-row" id="authType">
+        <button type="button" class="dchip sel" data-val="owner" onclick="fmPick(this)">Caring for someone</button>
+        <button type="button" class="dchip" data-val="dependent" onclick="fmPick(this)">Signing up for myself</button>
+      </div>
+    </div>
+    <label class="dl-label">Email</label>
+    <input class="chat-input" id="authEmail" type="email" placeholder="you@email.com" style="background:var(--white);width:100%;">
+    <label class="dl-label">Password</label>
+    <input class="chat-input" id="authPassword" type="password" placeholder="••••••••" style="background:var(--white);width:100%;" onkeydown="if(event.key==='Enter')submitAuth()">
+    <div id="authErr"></div>
+    <button class="btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem;" id="authBtn" onclick="submitAuth()">Sign in</button>
+    <p style="text-align:center;font-size:13px;color:var(--ink-muted);margin-top:1rem;">
+      <span id="authToggleText">New here?</span>
+      <a href="#" onclick="toggleAuthMode();return false;" style="color:var(--rust);font-weight:500;" id="authToggleLink">Create an account</a>
+    </p>
+  </div>
+</div>
+<!-- ONBOARDING (new users) -->
+<div class="auth-overlay" id="onbOverlay">
+  <div class="auth-card onb-card">
+    <div class="onb-progress"><div class="onb-bar" id="onbBar"></div></div>
+    <div class="page-eyebrow" id="onbStepLabel">Step 1 of 3</div>
+    <h2 id="onbTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;margin-bottom:0.3rem;">Who are we caring for?</h2>
+    <p class="msub" id="onbSub">A few details so we can set things up properly.</p>
+    <div id="onbBody"></div>
+    <div id="onbErr"></div>
+    <div style="display:flex;gap:9px;margin-top:1.5rem;">
+      <button class="btn-out" id="onbBack" onclick="onbPrev()" style="display:none;">Back</button>
+      <button class="btn-primary" style="flex:1;justify-content:center;" id="onbNext" onclick="onbNextStep()">Continue</button>
+    </div>
+  </div>
+</div>
+<div class="layout">
+  <aside class="side">
+    <div class="side-sec">Health</div>
+    <button class="side-btn dep-only" data-v="me" onclick="nav_('me')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> My Day</button>
+    <button class="side-btn active fam-only" data-v="monitor" onclick="nav_('monitor')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Parent Monitor</button>
+    <button class="side-btn" data-v="messages" onclick="nav_('messages')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg> Messages <span class="side-badge" id="msgBadge"></span></button>
+    <button class="side-btn" data-v="vault" onclick="nav_('vault')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Report Vault <span class="side-badge" id="vaultCount">0</span></button>
+    <button class="side-btn" data-v="compare" onclick="nav_('compare')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Compare Reports</button>
+    <button class="side-btn" data-v="vitals" onclick="nav_('vitals')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Vitals</button>
+    <button class="side-btn" data-v="timeline" onclick="nav_('timeline')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><circle cx="12" cy="7" r="2"/><circle cx="12" cy="17" r="2"/></svg> Medical Timeline</button>
+    <button class="side-btn" data-v="trends" onclick="nav_('trends')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Health Trends</button>
+    <button class="side-btn" data-v="chat" onclick="nav_('chat')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Ask AI</button>
+    <button class="side-btn" data-v="appts" onclick="nav_('appts')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Appointments <span class="side-badge" id="apptBadge"></span></button>
+    <div class="side-sec">Care</div>
+    <button class="side-btn" data-v="getcare" onclick="nav_('getcare')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Get Care</button>
+    <button class="side-btn" data-v="meds" onclick="nav_('meds')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M10.5 20.5 3.5 13.5a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7z"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/></svg> Medications <span class="side-badge" id="medsBadge"></span></button>
+    <button class="side-btn" data-v="daily" onclick="nav_('daily')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 21.35 10.55 20C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"/></svg> Daily Care & Family</button>
+    <button class="side-btn" data-v="emergency" onclick="nav_('emergency')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Emergency Card</button>
+    <button class="side-btn" data-v="team" onclick="nav_('team')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg> Care Team</button>
+    <button class="side-btn" data-v="wellness" onclick="nav_('wellness')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Food &amp; Wellness</button>
+    <button class="side-btn" data-v="activities" onclick="nav_('activities')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Activities &amp; Wellness</button>
+    <div class="side-sec">Manage</div>
+    <button class="side-btn" data-v="ops" data-req="admin" onclick="nav_('ops')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Requests <span class="side-badge" id="opsBadge"></span></button>
+    <button class="side-btn" data-v="details" onclick="nav_('details')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Details &amp; Profile</button>
+    <button class="side-btn" data-v="docs" onclick="nav_('docs')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Documents</button>
+  </aside>
+  <main class="main">
+    <!-- PARENT MONITOR -->
+    <div class="view active" id="view-monitor">
+      <div class="page-eyebrow">Parent Monitor</div>
+      <h1 class="pt">How is Papa, <em>right now?</em></h1>
+      <p class="psub">Everything at a glance — today's mood, medicines, vitals, and care team. Your morning-chai check-in.</p>
+      <div id="monitorBody"></div>
+    </div>
+
+    <div class="view" id="view-vault">
+      <div class="page-eyebrow">Report Vault</div>
+      <h1 class="pt">Papa's medical life, <em>all in one place</em></h1>
+      <p class="psub">Every report, organised by date. Upload a PDF or photo and AI extracts every value into the database automatically.</p>
+      <div class="score-row" id="scoreRow"></div>
+      <div class="vault-head">
+        <div style="font-size:13px; color:var(--ink-faint);"><span id="reportTotal">0</span> reports · newest first</div>
+        <button class="btn-primary" data-req="member" onclick="openAddDoc('report')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Upload report</button>
+      </div>
+      <div id="timeline"></div>
+    </div>
+    <div class="view" id="view-detail">
+      <button class="back-btn" onclick="nav_('vault')">&larr; Back to vault</button>
+      <div id="detailContent"></div>
+    </div>
+    <div class="view" id="view-compare">
+      <div class="page-eyebrow">Comparison Engine</div>
+      <h1 class="pt">What <em>changed</em> between two reports</h1>
+      <p class="psub">Pick two reports. Every parameter's change, direction, and range status - computed by the server.</p>
+      <div class="cmp-picker">
+        <div class="cmp-sel"><label>Earlier report</label><select id="cmpA" onchange="runCompare()"></select></div>
+        <div class="cmp-vs">vs</div>
+        <div class="cmp-sel"><label>Later report</label><select id="cmpB" onchange="runCompare()"></select></div>
+      </div>
+      <div class="cmp-ai">
+        <h4>AI Summary <span class="ai-badge">AI</span></h4>
+        <p id="cmpAiText">Click generate for a plain-English summary of what changed.</p>
+        <button class="btn-gen" onclick="genSummary()">Generate AI summary</button>
+      </div>
+      <div id="cmpTable"></div>
+      <div class="disclaimer">Educational information, not a medical diagnosis. Always discuss significant changes with a qualified doctor.</div>
+    </div>
+    <div class="view" id="view-trends">
+      <div class="page-eyebrow">Health Trends</div>
+      <h1 class="pt">Every value, <em>over time</em></h1>
+      <p class="psub">The green band is the healthy range.</p>
+      <div class="trend-grid" id="trendGrid"></div>
+    </div>
+    <div class="view" id="view-chat">
+      <div class="page-eyebrow">Ask AI</div>
+      <h1 class="pt">Ask anything about <em>the reports</em></h1>
+      <p class="psub">Answers are grounded only in the vault's data.</p>
+      <div class="chat-suggest">
+        <button class="sg" onclick="askSuggest(this)">What changed in the latest report?</button>
+        <button class="sg" onclick="askSuggest(this)">Is his diabetes improving?</button>
+        <button class="sg" onclick="askSuggest(this)">What should I ask his doctor?</button>
+      </div>
+      <div class="chat-box">
+        <div class="chat-msgs" id="chatMsgs">
+          <div class="msg bot">Hello! Ask me anything about the reports in this vault.</div>
+        </div>
+        <div class="chat-input-row">
+          <input class="chat-input" id="chatInput" placeholder="Ask about the reports..." onkeydown="if(event.key==='Enter')sendChat()">
+          <button class="chat-send" onclick="sendChat()">Send</button>
+        </div>
+      </div>
+      <div class="disclaimer">AI insights are educational, not a diagnosis. For medical decisions, consult a doctor.</div>
+    </div>
+
+    <!-- VITALS -->
+    <div class="view" id="view-vitals">
+      <div class="page-eyebrow">Vitals</div>
+      <h1 class="pt">Numbers that tell a <em>story</em></h1>
+      <p class="psub">BP, sugar and weight in ten seconds. Patterns show up long before a crisis does.</p>
+      <div class="vault-head">
+        <div style="font-size:13px;color:var(--ink-faint);" id="vitLatest"></div>
+        <button class="btn-primary" id="vitAddBtn" onclick="openAddVital()">+ Log a reading</button>
+      </div>
+      <div id="vitCards"></div>
+      <div id="vitList" style="margin-top:1.5rem;"></div>
+    </div>
+
+    <!-- MEDICAL TIMELINE -->
+    <div class="view" id="view-timeline">
+      <div class="page-eyebrow">Medical Timeline</div>
+      <h1 class="pt">The whole story, <em>in order</em></h1>
+      <p class="psub">Every prescription, report, visit, vital and check-in on one thread — so the next doctor sees it all in seconds.</p>
+      <div class="chip-row" id="tlFilters" style="margin-bottom:1.5rem;"></div>
+      <div id="tlList"></div>
+    </div>
+
+    <!-- APPOINTMENTS -->
+    <div class="view" id="view-appts">
+      <div class="page-eyebrow">Appointments &amp; Reminders</div>
+      <h1 class="pt">What's <em>coming up</em></h1>
+      <p class="psub">Doctor visits, tests and reminders — so nothing slips through.</p>
+      <div class="vault-head">
+        <div style="font-size:13px;color:var(--ink-faint);" id="apptCount"></div>
+        <button class="btn-primary" data-req="member" onclick="openAddAppt()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add</button>
+      </div>
+      <div id="apptUpcoming"></div>
+      <h4 style="font-size:13px;font-weight:600;color:var(--ink-faint);margin:2rem 0 1rem;text-transform:uppercase;letter-spacing:0.5px;">Past &amp; done</h4>
+      <div id="apptPast"></div>
+    </div>
+
+    <div class="view" id="view-getcare">
+      <div class="page-eyebrow">Get Care</div>
+      <h1 class="pt">What's going on with <em>Papa?</em></h1>
+      <p class="psub">Tell us what's happening. We'll suggest the right kind of help — and you can book it in a couple of taps.</p>
+
+      <!-- step 1 -->
+      <div id="gcStep1">
+        <div class="gc-concerns" id="gcConcerns"></div>
+        <div style="margin:1.5rem 0 0.5rem;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-faint);">Or describe it in your own words</div>
+        <textarea class="chat-input" id="gcText" placeholder="e.g. Papa has been having knee pain and finds it hard to walk to the market..." style="background:var(--white);min-height:80px;resize:vertical;width:100%;"></textarea>
+        <button class="btn-primary" style="margin-top:1rem;" onclick="runTriage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Find the right help</button>
+        <div id="gcErr"></div>
+      </div>
+
+      <!-- step 2: recommendations -->
+      <div id="gcStep2" style="display:none;">
+        <button class="back-btn" onclick="gcReset()">&larr; Start over</button>
+        <div class="gc-summary" id="gcSummary"></div>
+        <div id="gcRecs"></div>
+        <h4 style="font-size:14px;font-weight:600;margin:2rem 0 1rem;">Your requests</h4>
+        <div id="gcReqList"></div>
+      </div>
+    </div>
+
+    <!-- MY DAY (dependent's own home) -->
+    <div class="view" id="view-me">
+      <div class="page-eyebrow">My Day</div>
+      <h1 class="pt">Good day, <em id="meName">there</em></h1>
+      <p class="psub">Tell your family how you're doing today.</p>
+      <div class="checkin-box" id="checkinBox"></div>
+      <div class="mon-grid" style="margin-top:1.5rem;">
+        <div>
+          <h4 style="font-size:14px;font-weight:600;margin-bottom:0.8rem;">Your medicines today</h4>
+          <div id="meMeds"></div>
+        </div>
+        <div id="meMsgWrap" style="display:none;">
+          <h4 style="font-size:14px;font-weight:600;margin-bottom:0.8rem;">From your family</h4>
+          <div id="meMessages"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MESSAGES -->
+    <div class="view" id="view-messages">
+      <div class="page-eyebrow">Messages</div>
+      <h1 class="pt">A note goes <em>a long way</em></h1>
+      <p class="psub">Send a message they'll see on their screen. Presence, not just care.</p>
+      <div class="msg-compose">
+        <textarea class="chat-input" id="msgBody" placeholder="Thinking of you, Papa. Will call this evening ❤️" style="background:var(--white);min-height:70px;resize:vertical;width:100%;"></textarea>
+        <div class="msg-tools">
+          <button class="btn-primary" onclick="sendMessage()">Send</button>
+          <button class="msg-tool" id="recBtn" onclick="toggleRecord()">🎙️ Record a voice note</button>
+          <label class="msg-tool" for="msgPhoto">🖼️ Send a photo</label>
+          <input type="file" id="msgPhoto" accept="image/*" style="display:none" onchange="sendPhoto(this)">
+          <span class="rec-timer" id="recTimer"></span>
+        </div>
+        <div id="recPreview"></div>
+      </div>
+      <div id="msgList" style="margin-top:1.75rem;"></div>
+    </div>
+
+    <!-- DOCUMENTS -->
+    <div class="view" id="view-docs">
+      <div class="page-eyebrow">Document Vault</div>
+      <h1 class="pt">Everything <em>in one place</em></h1>
+      <p class="psub">Insurance, ID cards, discharge summaries, prescriptions — findable at 2am when it matters.</p>
+      <div class="vault-head">
+        <div style="font-size:13px;color:var(--ink-faint);" id="docCount"></div>
+        <button class="btn-primary" data-req="member" onclick="openAddDoc('insurance')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add document</button>
+      </div>
+      <div class="chip-row" id="docTabs" style="margin-bottom:1.25rem;"></div>
+      <div id="docList"></div>
+      <input type="file" id="docInput" style="display:none" onchange="uploadDoc(this.files[0])">
+    </div>
+
+    <!-- DETAILS & PROFILE -->
+    <div class="view" id="view-details">
+      <div class="page-eyebrow">Details &amp; Profile</div>
+      <h1 class="pt">Everything we know about <em id="detName">them</em></h1>
+      <p class="psub">This drives the emergency card, the insights, and how the app adapts. Keep it current.</p>
+      <div class="vault-head">
+        <div style="font-size:13px;color:var(--ink-faint);">From the intake form</div>
+        <button class="btn-primary" data-req="member" onclick="editProfile()">Edit details</button>
+      </div>
+      <div id="detBody"></div>
+    </div>
+
+    <!-- OPS / REQUESTS -->
+    <div class="view" id="view-ops">
+      <div class="page-eyebrow">Requests</div>
+      <h1 class="pt">What needs <em>a phone call</em></h1>
+      <p class="psub">Every booking and alert across your families. Call, then move it along.</p>
+      <div id="opsAlerts"></div>
+      <div id="opsList"></div>
+    </div>
+
+    <!-- FOOD & WELLNESS -->
+    <div class="view" id="view-wellness">
+      <div class="page-eyebrow">Food &amp; Wellness</div>
+      <h1 class="pt">Small habits, <em>big difference</em></h1>
+      <p class="psub">A gentle daily nudge for <span id="wellName">them</span> — movement, meals and water.</p>
+      <div class="hab-box" id="wellHabits"></div>
+      <div class="vault-head" style="margin-top:2rem;">
+        <div style="font-size:13px;color:var(--ink-faint);" id="wellDiet"></div>
+      </div>
+      <div class="food-grid" id="wellMeals"></div>
+      <div id="wellTips" style="margin-top:1.5rem;"></div>
+      <div id="wellHistory" style="margin-top:2rem;"></div>
+    </div>
+
+    <!-- MEDICATIONS -->
+    <div class="view" id="view-meds">
+      <div class="page-eyebrow">Medications</div>
+      <h1 class="pt">Today's <em>medicines</em></h1>
+      <p class="psub">The caregiver ticks off each dose. You see adherence at a glance, from anywhere.</p>
+      <div class="score-row" id="medsScore" style="grid-template-columns:repeat(3,1fr);"></div>
+      <div id="medsToday"></div>
+      <div class="vault-head" style="margin-top:2rem;">
+        <div style="font-size:13px;color:var(--ink-faint);">All medicines</div>
+        <button class="btn-primary" data-req="meds" onclick="openAddMed()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> Add medicine</button>
+      </div>
+      <div id="medsList"></div>
+    </div>
+
+    <!-- DAILY CARE & FAMILY -->
+    <div class="view" id="view-daily">
+      <div class="page-eyebrow">Daily Care &amp; Family</div>
+      <h1 class="pt">How is Papa <em>today?</em></h1>
+      <p class="psub">The caregiver logs the day in seconds. Everyone in the family sees a warm update — without having to ask.</p>
+      <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:1.5rem;align-items:start;">
+        <div class="card" style="padding:1.5rem;">
+          <h4 style="font-size:14px;font-weight:600;margin-bottom:1rem;">Caregiver check-in</h4>
+          <label class="dl-label">Mood</label>
+          <div class="chip-row" id="moodChips">
+            <button class="dchip" data-g="mood" data-v="happy">😊 Happy</button>
+            <button class="dchip" data-g="mood" data-v="calm">🙂 Calm</button>
+            <button class="dchip" data-g="mood" data-v="low">😐 Low</button>
+            <button class="dchip" data-g="mood" data-v="unwell">🤒 Unwell</button>
+          </div>
+          <label class="dl-label">Ate well?</label>
+          <div class="chip-row" id="ateChips">
+            <button class="dchip" data-g="ate" data-v="yes">Yes</button>
+            <button class="dchip" data-g="ate" data-v="partly">Partly</button>
+            <button class="dchip" data-g="ate" data-v="no">No</button>
+          </div>
+          <label class="dl-label">Sleep</label>
+          <div class="chip-row" id="sleepChips">
+            <button class="dchip" data-g="sleep" data-v="good">Good</button>
+            <button class="dchip" data-g="sleep" data-v="ok">Okay</button>
+            <button class="dchip" data-g="sleep" data-v="poor">Poor</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <div style="flex:1;"><label class="dl-label">BP</label><input class="chat-input" id="dlBp" placeholder="128/82" style="background:var(--white);"></div>
+            <div style="flex:1;"><label class="dl-label">Sugar</label><input class="chat-input" id="dlSugar" placeholder="118" style="background:var(--white);"></div>
+          </div>
+          <label class="dl-label">Note for the family</label>
+          <textarea class="chat-input" id="dlNotes" placeholder="Had a good walk, watched the news..." style="background:var(--white);min-height:60px;resize:vertical;"></textarea>
+          <button class="btn-primary" style="width:100%;justify-content:center;margin-top:1rem;" onclick="submitLog()">Send today's update</button>
+          <div id="dlErr"></div>
+        </div>
+        <div>
+          <h4 style="font-size:14px;font-weight:600;margin-bottom:1rem;">Family feed</h4>
+          <div id="familyFeed"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EMERGENCY CARD -->
+    <div class="view" id="view-emergency">
+      <div class="page-eyebrow">Emergency Card</div>
+      <h1 class="pt">If something happens, <em>everything they need</em></h1>
+      <p class="psub">One tap. All the critical information a hospital or responder needs — ready to show or print.</p>
+      <div id="emCard"></div>
+      <button class="btn-out" style="margin-top:1.25rem;" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+
+    <!-- CARE TEAM -->
+    <div class="view" id="view-team">
+      <div class="page-eyebrow">Care Team</div>
+      <h1 class="pt">The people looking after <em>Papa</em></h1>
+      <p class="psub">Your assigned caregivers and specialists — and book a new one whenever you need.</p>
+      <div id="teamList"></div>
+      <div class="vault-head" style="margin-top:2rem;">
+        <div style="font-size:13px;color:var(--ink-faint);">Need someone new?</div>
+      </div>
+      <div class="grid-book" id="bookGrid"></div>
+      <h4 style="font-size:14px;font-weight:600;margin:2rem 0 1rem;">Your requests</h4>
+      <div id="reqList"></div>
+    </div>
+
+    <!-- ACTIVITIES & WELLNESS -->
+    <div class="view" id="view-activities">
+      <div class="page-eyebrow">Activities &amp; Wellness</div>
+      <h1 class="pt">Move a little, <em>feel a lot better</em></h1>
+      <p class="psub">Gentle, senior-safe exercise and yoga your parent can follow along at home. New sessions added regularly.</p>
+      <div class="chip-row" id="actCats" style="margin-bottom:1.5rem;"></div>
+      <div class="act-grid" id="actGrid"></div>
+      <div class="disclaimer">Gentle movement is great, but everyone's different. If your parent has pain, heart issues, or balance concerns, check with their doctor before starting a new routine.</div>
+    </div>
+  </main>
+</div>
+<div class="modal-bg" id="medModal">
+  <div class="modal" style="max-width:460px;">
+    <h2>Add a medicine</h2>
+    <p class="msub">Add it once — the caregiver ticks it off each day.</p>
+    <label class="dl-label">Name</label>
+    <input class="chat-input" id="medName" placeholder="e.g. Metformin" style="background:var(--white);">
+    <label class="dl-label">Dosage</label>
+    <input class="chat-input" id="medDose" placeholder="e.g. 500mg" style="background:var(--white);">
+    <label class="dl-label">When?</label>
+    <div class="chip-row" id="medSlots">
+      <button class="dchip" data-slot="morning">Morning</button>
+      <button class="dchip" data-slot="afternoon">Afternoon</button>
+      <button class="dchip" data-slot="night">Night</button>
+    </div>
+    <label class="dl-label">Which days?</label>
+    <div class="chip-row" id="medFreq">
+      <button type="button" class="dchip sel" data-f="daily" onclick="pickFreq(this)">Every day</button>
+      <button type="button" class="dchip" data-f="weekdays" onclick="pickFreq(this)">Weekdays</button>
+      <button type="button" class="dchip" data-f="custom" onclick="pickFreq(this)">Pick days</button>
+    </div>
+    <div class="chip-row" id="medDays" style="display:none;">
+      <button type="button" class="dchip" data-d="1" onclick="this.classList.toggle('sel')">Mon</button>
+      <button type="button" class="dchip" data-d="2" onclick="this.classList.toggle('sel')">Tue</button>
+      <button type="button" class="dchip" data-d="3" onclick="this.classList.toggle('sel')">Wed</button>
+      <button type="button" class="dchip" data-d="4" onclick="this.classList.toggle('sel')">Thu</button>
+      <button type="button" class="dchip" data-d="5" onclick="this.classList.toggle('sel')">Fri</button>
+      <button type="button" class="dchip" data-d="6" onclick="this.classList.toggle('sel')">Sat</button>
+      <button type="button" class="dchip" data-d="0" onclick="this.classList.toggle('sel')">Sun</button>
+    </div>
+    <label class="dl-label">Reminder times</label>
+    <div id="medTimes"></div>
+    <button type="button" class="btn-out" style="padding:7px 13px;font-size:12.5px;margin-top:6px;" onclick="addTimeRow()">+ Add a time</button>
+    <label class="dl-label">Note (optional)</label>
+    <input class="chat-input" id="medNote" placeholder="e.g. After food" style="background:var(--white);">
+    <div class="modal-actions">
+      <button class="btn-out" onclick="closeAddMed()">Cancel</button>
+      <button class="btn-primary" onclick="saveMed()">Add medicine</button>
+    </div>
+  </div>
+</div>
+<div class="modal-bg" id="bookModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 id="bookTitle">Book care</h2>
+    <p class="msub" id="bookDesc"></p>
+    <label class="dl-label">How often?</label>
+    <div class="chip-row" id="bookFreq">
+      <button class="dchip sel" data-f="one-time">One-time</button>
+      <button class="dchip" data-f="weekly">Weekly</button>
+      <button class="dchip" data-f="daily">Daily</button>
+    </div>
+    <label class="dl-label">When would you like them?</label>
+    <input class="chat-input" id="bookWhen" placeholder="e.g. Tomorrow 10 AM, or Sat mornings" style="background:var(--white);">
+    <label class="dl-label">Anything to note? (optional)</label>
+    <input class="chat-input" id="bookNote" placeholder="e.g. 3rd floor, no lift" style="background:var(--white);">
+    <div class="modal-actions">
+      <button class="btn-out" onclick="closeBook()">Cancel</button>
+      <button class="btn-primary" onclick="confirmBook()">Confirm booking</button>
+    </div>
+  </div>
+</div>
+<!-- GENERIC FORM MODAL (add parent, invite family, etc.) -->
+<div class="modal-bg" id="formModal">
+  <div class="modal" style="max-width:440px;">
+    <h2 id="fmTitle">Title</h2>
+    <p class="msub" id="fmSub" style="display:none;"></p>
+    <div id="fmFields"></div>
+    <div id="fmErr"></div>
+    <div class="modal-actions">
+      <button class="btn-out" onclick="closeForm()">Cancel</button>
+      <button class="btn-primary" id="fmSubmit" onclick="submitForm()">Save</button>
+    </div>
+  </div>
+</div>
+<!-- FAMILY & ROLES MODAL -->
+<div class="modal-bg" id="membersModal">
+  <div class="modal" style="max-width:460px;">
+    <h2>Family &amp; roles</h2>
+    <p class="msub">Who can see and help with this parent.</p>
+    <div id="membersList" style="margin-bottom:1.25rem;"></div>
+    <div style="border-top:1px solid var(--border);padding-top:1.1rem;">
+      <label class="dl-label">Invite by email</label>
+      <input class="chat-input" id="inviteEmail" type="email" placeholder="they@email.com (must have signed up)" style="background:var(--white);width:100%;">
+      <label class="dl-label">Role</label>
+      <div class="chip-row" id="inviteRole">
+        <button type="button" class="dchip" data-val="admin" onclick="fmPick(this)">Admin</button>
+        <button type="button" class="dchip sel" data-val="member" onclick="fmPick(this)">Member</button>
+        <button type="button" class="dchip" data-val="caregiver" onclick="fmPick(this)">Caregiver</button>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-out" onclick="closeMembers()">Close</button>
+      <button class="btn-primary" onclick="sendInvite()">Send invite</button>
+    </div>
+  </div>
+</div>
+<!-- ADD DOCUMENT -->
+<div class="modal-bg" id="docModal">
+  <div class="modal" style="max-width:460px;">
+    <h2>Add a document</h2>
+    <p class="msub">Insurance, ID, discharge summary, prescription, or a photo.</p>
+    <div id="docTitleWrap">
+      <label class="dl-label">Title</label>
+      <input class="chat-input" id="docTitle" placeholder="e.g. Star Health Policy 2026" style="background:var(--white);width:100%;">
+    </div>
+    <label class="dl-label">Type</label>
+    <div class="chip-row" id="docCat">
+      <button type="button" class="dchip sel" data-val="report" onclick="pickDocCat(this)">🧪 Lab report</button>
+      <button type="button" class="dchip" data-val="prescription" onclick="pickDocCat(this)">💊 Prescription</button>
+      <button type="button" class="dchip" data-val="insurance" onclick="pickDocCat(this)">🛡️ Insurance</button>
+      <button type="button" class="dchip" data-val="id" onclick="pickDocCat(this)">🪪 ID</button>
+      <button type="button" class="dchip" data-val="hospital" onclick="pickDocCat(this)">🏥 Hospital</button>
+      <button type="button" class="dchip" data-val="photo" onclick="pickDocCat(this)">🖼️ Photo</button>
+      <button type="button" class="dchip" data-val="other" onclick="pickDocCat(this)">📄 Other</button>
+    </div>
+    <div class="doc-hint" id="docHint"></div>
+    <label class="dl-label">File</label>
+    <label class="file-pick" for="docFile" id="docFileLabel">
+      <span>Choose a file or take a photo</span>
+      <span class="file-pick-hint">PDF, image or any document</span>
+    </label>
+    <input type="file" id="docFile" accept="image/*,application/pdf,.doc,.docx" style="display:none" onchange="docFileChosen(this)">
+    <div id="docErr"></div>
+    <div class="modal-actions">
+      <button class="btn-out" onclick="closeDocModal()">Cancel</button>
+      <button class="btn-primary" id="docSave" onclick="saveDoc()" disabled>Save</button>
+    </div>
+  </div>
+</div>
+<!-- TOAST -->
+<div id="toastHost"></div>
+<script>
+// ═══════════ TOAST (replaces alert) ═══════════
+function toast(msg, kind){
+  const host=document.getElementById('toastHost');
+  const t=document.createElement('div');
+  t.className='toast'+(kind==='error'?' toast-error':(kind==='success'?' toast-success':''));
+  t.textContent=msg;
+  host.appendChild(t);
+  requestAnimationFrame(()=>t.classList.add('show'));
+  setTimeout(()=>{ t.classList.remove('show'); setTimeout(()=>t.remove(),300); }, 3600);
+}
+// ═══════════ GENERIC FORM MODAL ═══════════
+let _formResolve=null;
+function formModal(cfg){
+  return new Promise(resolve=>{
+    _formResolve=resolve;
+    document.getElementById('fmTitle').textContent=cfg.title;
+    const sub=document.getElementById('fmSub');
+    if(cfg.subtitle){ sub.textContent=cfg.subtitle; sub.style.display='block'; } else sub.style.display='none';
+    document.getElementById('fmErr').innerHTML='';
+    document.getElementById('fmSubmit').textContent=cfg.submitLabel||'Save';
+    document.getElementById('fmFields').innerHTML = cfg.fields.map(f=>{
+      if(f.options){
+        return '<label class="dl-label">'+esc(f.label)+'</label><div class="chip-row" data-fld="'+f.id+'">'
+          + f.options.map((o,i)=>'<button type="button" class="dchip'+(i===0?' sel':'')+'" data-val="'+esc(o.value)+'" onclick="fmPick(this)">'+esc(o.label)+'</button>').join('')+'</div>';
+      }
+      return '<label class="dl-label">'+esc(f.label)+'</label><input class="chat-input fm-input" data-fld="'+esc(f.id)+'" type="'+(f.type||'text')+'" placeholder="'+esc(f.placeholder||'')+'" value="'+esc(f.value||'')+'" style="background:var(--white);width:100%;">';
+    }).join('');
+    document.getElementById('formModal').classList.add('open');
+    setTimeout(()=>{ const first=document.querySelector('#fmFields .fm-input'); if(first)first.focus(); },50);
+  });
+}
+function fmPick(btn){ btn.parentElement.querySelectorAll('.dchip').forEach(c=>c.classList.remove('sel')); btn.classList.add('sel'); }
+function closeForm(){ document.getElementById('formModal').classList.remove('open'); if(_formResolve){ _formResolve(null); _formResolve=null; } }
+function submitForm(){
+  const out={};
+  document.querySelectorAll('#fmFields [data-fld]').forEach(el=>{
+    if(el.classList.contains('chip-row')){ const sel=el.querySelector('.dchip.sel'); out[el.dataset.fld]=sel?sel.dataset.val:null; }
+    else out[el.dataset.fld]=el.value.trim();
+  });
+  document.getElementById('formModal').classList.remove('open');
+  if(_formResolve){ _formResolve(out); _formResolve=null; }
+}
+</script>
+<script>
+const API = '';   // same origin
+let PARENT = null;
+let REPORTS = [];
+let ME = null;         // { user, parents:[{...,role}] }
+let AUTH_MODE = 'login';
+let IS_DEPENDENT = false;
+let PROFILE = {};
+
+async function j(url, opts){
+  opts = opts || {};
+  opts.credentials = 'same-origin';
+  const r = await fetch(API+url, opts);
+  if(r.status===401){ showAuth(); throw new Error('Please sign in'); }
+  if(!r.ok){ const t = await r.json().catch(()=>({error:r.status})); throw new Error(t.error||('HTTP '+r.status)); }
+  return r.json();
+}
+
+function fmtDate(d){ try{ return new Date(d).toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'}); }catch(e){ return d; } }
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function statusCls(s){ return s==='ok'?'flag-ok':(s==='high'?'flag-high':'flag-watch'); }
+function statusLabel(s){ return s==='ok'?'In range':(s==='high'?'High':(s==='low'?'Low':'-')); }
+function myRole(){ return PARENT ? PARENT.role : null; }
+function roleAtLeast(r, need){ const rank={caregiver:1,dependent:2,member:2,admin:3}; return (rank[r]||0)>=(rank[need]||99); }
+
+// ═══════════ AUTH ═══════════
+function showAuth(){ document.getElementById('authOverlay').classList.add('open'); }
+function hideAuth(){ document.getElementById('authOverlay').classList.remove('open'); }
+function toggleAuthMode(){
+  AUTH_MODE = AUTH_MODE==='login' ? 'signup' : 'login';
+  const signup = AUTH_MODE==='signup';
+  document.getElementById('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
+  document.getElementById('authSub').textContent = signup ? 'Start your family\'s care space.' : 'Sign in to your family\'s care space.';
+  document.getElementById('authNameWrap').style.display = signup ? 'block' : 'none';
+  document.getElementById('authBtn').textContent = signup ? 'Create account' : 'Sign in';
+  document.getElementById('authToggleText').textContent = signup ? 'Already have an account?' : 'New here?';
+  document.getElementById('authToggleLink').textContent = signup ? 'Sign in' : 'Create an account';
+  document.getElementById('authErr').innerHTML = '';
+}
+async function submitAuth(){
+  const email=document.getElementById('authEmail').value.trim();
+  const password=document.getElementById('authPassword').value;
+  const name=document.getElementById('authName').value.trim();
+  const errBox=document.getElementById('authErr');
+  errBox.innerHTML='';
+  if(!email||!password){ errBox.innerHTML='<div class="err-box">Email and password are required.</div>'; return; }
+  const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
+  const typeBtn = document.querySelector('#authType .dchip.sel');
+  const acctType = typeBtn ? typeBtn.dataset.val : 'owner';
+  const body = AUTH_MODE==='signup' ? {email,password,name,account_type:acctType} : {email,password};
+  try{
+    const r = await fetch(API+path, {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok){ const t=await r.json().catch(()=>({error:'Something went wrong'})); throw new Error(t.error); }
+    hideAuth();
+    document.getElementById('authPassword').value='';
+    window._acctType = AUTH_MODE==='signup' ? acctType : null;
+    await boot();
+  }catch(e){ errBox.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
+}
+async function logout(){
+  await fetch(API+'/api/auth/logout', {method:'POST',credentials:'same-origin'});
+  ME=null; PARENT=null;
+  showAuth();
+}
+
+// ═══════════ MENUS ═══════════
+function toggleParentMenu(e){ e.stopPropagation(); closeMenus('parentMenu'); document.getElementById('parentMenu').classList.toggle('open'); }
+function toggleUserMenu(e){ e.stopPropagation(); closeMenus('userMenu'); document.getElementById('userMenu').classList.toggle('open'); }
+function closeMenus(except){ ['parentMenu','userMenu'].forEach(id=>{ if(id!==except) document.getElementById(id).classList.remove('open'); }); }
+document.addEventListener('click', ()=>closeMenus(''));
+
+function renderParentMenu(){
+  const menu=document.getElementById('parentMenu');
+  const pick=document.getElementById('parentPick');
+  // a dependent only ever has themselves — no switcher, no adding parents
+  if(IS_DEPENDENT){
+    if(pick) pick.style.pointerEvents='none';
+    const chev=pick?pick.querySelector('svg'):null; if(chev) chev.style.display='none';
+    menu.innerHTML='';
+    return;
+  }
+  if(pick) pick.style.pointerEvents='';
+  let html='<div class="pick-head">Switch parent</div>';
+  for(const p of ME.parents){
+    html += '<button class="pick-item '+(PARENT&&p.id===PARENT.id?'active':'')+'" onclick="switchParent(\''+p.id+'\')"><span class="pick-av">'+esc(p.name[0])+'</span>'+esc(p.name)+'<span class="pick-role">'+esc(p.role)+'</span></button>';
+  }
+  html += '<div class="pick-div"></div><button class="pick-item" onclick="openAddParent()"><span class="pick-av">+</span>Add a parent</button>';
+  menu.innerHTML=html;
+}
+function renderUserMenu(){
+  const menu=document.getElementById('userMenu');
+  menu.innerHTML = '<div class="pick-head">'+esc(ME.user.name)+'<br><span style="color:var(--ink-faint);">'+esc(ME.user.email)+'</span></div>'
+    + (!IS_DEPENDENT && roleAtLeast(myRole(),'admin') ? '<div class="pick-div"></div><button class="pick-item" onclick="openMembers()">👨‍👩‍👧 Family &amp; roles</button>' : '')
+    + (!IS_DEPENDENT ? '<div class="pick-div"></div><button class="pick-item" onclick="window.open(\'/caregiver\',\'_blank\')">📱 Caregiver view</button>' : '')
+    + '<div class="pick-div"></div><button class="pick-item" onclick="logout()">Sign out</button>';
+}
+
+async function switchParent(id){
+  PARENT = ME.parents.find(p=>p.id===id) || ME.parents[0];
+  closeMenus('');
+  paintParent();
+  applyRoleUI();
+  await loadReports();
+  loadMonitor();
+  nav_('monitor');
+}
+function paintParent(){
+  if(!PARENT) return;
+  document.getElementById('ppName').textContent = PARENT.name + (PARENT.age? ', '+PARENT.age : '');
+  document.getElementById('ppAv').textContent = PARENT.name[0];
+  document.getElementById('userAv').textContent = ME.user.name[0];
+  renderParentMenu(); renderUserMenu();
+}
+
+// hide admin/member-only controls based on role
+function applyRoleUI(){
+  const role = myRole();
+  document.querySelectorAll('[data-req]').forEach(el=>{
+    const req = el.dataset.req;
+    const ok = req==='meds' ? (role==='admin' || role==='dependent') : roleAtLeast(role, req);
+    el.classList.toggle('role-hidden', !ok);
+  });
+}
+
+// add parent (admin action) — styled modal
+async function openAddParent(){
+  closeMenus('');
+  const res = await formModal({
+    title: 'Add a parent',
+    subtitle: 'Create a new care space. You\'ll be their admin.',
+    submitLabel: 'Add parent',
+    fields: [
+      {id:'name', label:'Name', placeholder:'e.g. Sunita Devi'},
+      {id:'age', label:'Age (optional)', placeholder:'e.g. 72', type:'number'},
+      {id:'relation', label:'Relation (optional)', placeholder:'e.g. mother'},
+    ],
+  });
+  if(!res || !res.name){ return; }
+  try{
+    await j('/api/parents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:res.name,age:res.age?+res.age:null,relation:res.relation||null})});
+    ME = await j('/api/me');
+    renderParentMenu();
+    toast(res.name+' added. Switch to them from the parent menu.','success');
+  }catch(e){ toast('Could not add: '+e.message,'error'); }
+}
+// family & roles — styled modal
+async function openMembers(){
+  closeMenus('');
+  try{
+    const members = await j('/api/parents/'+PARENT.id+'/members');
+    openMembersModal(members);
+  }catch(e){ toast(e.message,'error'); }
+}
+function openMembersModal(members){
+  const rows = members.map(m=>'<div class="mem-row"><div><div class="mem-name">'+esc(m.name)+'</div><div class="mem-email">'+esc(m.email)+'</div></div><span class="pick-role">'+esc(m.role)+'</span></div>').join('');
+  document.getElementById('membersList').innerHTML = rows || '<div class="psub">No members yet.</div>';
+  document.getElementById('inviteEmail').value='';
+  document.querySelectorAll('#inviteRole .dchip').forEach((c,i)=>c.classList.toggle('sel',i===1)); // default member
+  document.getElementById('membersModal').classList.add('open');
+}
+function closeMembers(){ document.getElementById('membersModal').classList.remove('open'); }
+async function sendInvite(){
+  const email=document.getElementById('inviteEmail').value.trim();
+  const roleBtn=document.querySelector('#inviteRole .dchip.sel');
+  const role=roleBtn?roleBtn.dataset.val:'member';
+  if(!email){ toast('Enter an email to invite.','error'); return; }
+  try{
+    await j('/api/parents/'+PARENT.id+'/members',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email,role})});
+    const members = await j('/api/parents/'+PARENT.id+'/members');
+    openMembersModal(members);
+    toast('Added '+email+' as '+role+'.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+function nav_(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  const view=document.getElementById('view-'+v); if(view)view.classList.add('active');
+  document.querySelectorAll('.side-btn[data-v]').forEach(b=>b.classList.remove('active'));
+  const btn=document.querySelector('.side-btn[data-v="'+v+'"]'); if(btn)btn.classList.add('active');
+  if(v==='compare')buildCompare();
+  if(v==='trends')buildTrends();
+  if(v==='meds')loadMeds();
+  if(v==='daily')loadDaily();
+  if(v==='emergency')loadEmergency();
+  if(v==='monitor')loadMonitor();
+  if(v==='team')loadTeam();
+  if(v==='activities')loadActivities();
+  if(v==='getcare')loadGetcare();
+  if(v==='appts')loadAppts();
+  if(v==='me')loadMyDay();
+  if(v==='messages')loadMessages();
+  if(v==='docs')loadDocs();
+  if(v==='details')loadDetails();
+  if(v==='wellness')loadWellness();
+  if(v==='vitals')loadVitals();
+  if(v==='timeline')loadTimeline();
+  if(v==='ops')loadOps();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+async function init(){
+  // health/AI pill is public
+  try{
+    const h = await j('/api/health');
+    const pill = document.getElementById('aiPill');
+    pill.textContent = h.ai ? 'AI: ready' : 'AI: no key';
+    pill.classList.toggle('on', h.ai);
+    window.AI_ON = !!h.ai;
+  }catch(e){}
+  // try to bootstrap a session
+  try{
+    ME = await fetch(API+'/api/me',{credentials:'same-origin'}).then(r=>r.ok?r.json():null);
+  }catch(e){ ME=null; }
+  if(!ME){ showAuth(); return; }
+  await boot();
+}
+
+async function boot(){
+  ME = await j('/api/me');
+  hideAuth();
+  // brand-new user → intake form
+  if(!ME.user.onboarded || !ME.parents.length){
+    startOnboarding(window._acctType || (ME.is_dependent?'dependent':'owner'));
+    return;
+  }
+  document.getElementById('onbOverlay').classList.remove('open');
+  // caregiver-only users get the simple surface
+  if(ME.parents.length && ME.parents.every(p=>p.role==='caregiver')){
+    window.location.href='/caregiver';
+    return;
+  }
+  PARENT = ME.parents[0];
+  IS_DEPENDENT = ME.is_dependent && PARENT.role==='dependent';
+  applyDependentMode();
+  paintParent();
+  await applyProfileAdaptations();
+  applyRoleUI();
+  await loadReports();
+  if(!IS_DEPENDENT) loadMonitor();
+  nav_(IS_DEPENDENT ? 'me' : 'monitor');
+  startReminders();
+}
+
+// ═══════════ ONBOARDING WIZARD ═══════════
+let ONB = { step:0, type:'owner', data:{}, profile:{} };
+const ONB_STEPS = [
+  { title:'Who are we caring for?', sub:'A few basics to set things up.', fields:'basics' },
+  { title:'Daily living', sub:'This helps us tailor the app and suggest the right support.', fields:'function' },
+  { title:'Health & lifestyle', sub:'Last step — this powers the emergency card and insights.', fields:'health' },
+];
+function startOnboarding(type){
+  ONB = { step:0, type, data:{}, profile:{} };
+  document.getElementById('onbOverlay').classList.add('open');
+  renderOnb();
+}
+function renderOnb(){
+  const s = ONB_STEPS[ONB.step];
+  document.getElementById('onbStepLabel').textContent = `Step ${ONB.step+1} of ${ONB_STEPS.length}`;
+  document.getElementById('onbBar').style.width = ((ONB.step+1)/ONB_STEPS.length*100)+'%';
+  const self = ONB.type==='dependent';
+  document.getElementById('onbTitle').textContent = ONB.step===0 ? (self?'Tell us about yourself':'Who are we caring for?') : s.title;
+  document.getElementById('onbSub').textContent = s.sub;
+  document.getElementById('onbErr').innerHTML='';
+  document.getElementById('onbBack').style.display = ONB.step>0 ? 'block':'none';
+  document.getElementById('onbNext').textContent = ONB.step===ONB_STEPS.length-1 ? 'Finish' : 'Continue';
+  let h='';
+  if(s.fields==='basics'){
+    h += onbInput('name', self?'Your full name':'Their full name', self?'e.g. Harish Khandelwal':'e.g. Harish Khandelwal', ONB.data.name||'');
+    h += onbInput('age','Age','e.g. 85',ONB.data.age||'','number');
+    if(!self) h += onbInput('relation','Relation to you','e.g. father, mother',ONB.data.relation||'');
+    h += onbInput('city','City','e.g. Bengaluru',ONB.data.city||'');
+    h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
+  } else if(s.fields==='function'){
+    h += onbChips('mobility','Getting around',[['independent','On their own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
+    h += onbChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']],ONB.profile.eyesight);
+    h += onbChips('hearing','Hearing',[['good','Good'],['aid','Uses a hearing aid'],['poor','Poor'],['deaf','Very limited']],ONB.profile.hearing);
+    h += onbChips('speech','Speech',[['clear','Clear'],['slurred','Slightly unclear'],['limited','Limited'],['nonverbal','Non-verbal']],ONB.profile.speech);
+    h += onbChips('memory','Memory',[['sharp','Sharp'],['forgetful','A bit forgetful'],['confused','Often confused']],ONB.profile.memory);
+    h += onbChips('fall_history','Falls in the last year',[['none','None'],['once','Once'],['multiple','More than once']],ONB.profile.fall_history);
+    h += onbChips('lives_alone','Lives alone?',[['no','No'],['yes','Yes']],ONB.profile.lives_alone===true?'yes':(ONB.profile.lives_alone===false?'no':undefined));
+  } else {
+    h += onbChips('smoking','Smoking',[['never','Never'],['former','Gave up'],['current','Currently smokes']],ONB.profile.smoking);
+    h += onbChips('alcohol','Alcohol',[['never','Never'],['occasional','Occasionally'],['regular','Regularly']],ONB.profile.alcohol);
+    h += onbChips('diet','Diet',[['vegetarian','Vegetarian'],['non-vegetarian','Non-vegetarian'],['jain','Jain'],['vegan','Vegan']],ONB.profile.diet);
+    h += onbInput('blood_group','Blood group','e.g. B+',ONB.profile.blood_group||'');
+    h += onbInput('allergies','Allergies','e.g. Penicillin, dust',ONB.profile.allergies||'');
+    h += onbInput('conditions','Ongoing conditions','e.g. Diabetes, BP',ONB.profile.conditions||'');
+    h += onbChips('text_size','Text size in the app',[['normal','Normal'],['large','Large'],['xlarge','Extra large']],ONB.profile.text_size||'normal');
+  }
+  document.getElementById('onbBody').innerHTML=h;
+}
+function onbInput(id,label,ph,val,type){ return '<label class="dl-label">'+esc(label)+'</label><input class="chat-input onb-f" data-k="'+id+'" type="'+(type||'text')+'" placeholder="'+esc(ph)+'" value="'+esc(val||'')+'" style="background:var(--white);width:100%;">'; }
+function onbChips(id,label,opts,sel){
+  return '<label class="dl-label">'+esc(label)+'</label><div class="chip-row onb-c" data-k="'+id+'">'
+    + opts.map(([v,l])=>'<button type="button" class="dchip'+(sel===v?' sel':'')+'" data-val="'+v+'" onclick="fmPick(this)">'+esc(l)+'</button>').join('')+'</div>';
+}
+function collectOnb(){
+  document.querySelectorAll('#onbBody .onb-f').forEach(el=>{
+    const k=el.dataset.k, v=el.value.trim();
+    if(['name','age','relation','city'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
+  });
+  document.querySelectorAll('#onbBody .onb-c').forEach(el=>{
+    const k=el.dataset.k, sel=el.querySelector('.dchip.sel');
+    if(!sel) return;
+    if(k==='lives_alone') ONB.profile[k] = sel.dataset.val==='yes';
+    else ONB.profile[k]=sel.dataset.val;
+  });
+}
+function onbPrev(){ collectOnb(); ONB.step--; renderOnb(); }
+async function onbNextStep(){
+  collectOnb();
+  if(ONB.step===0 && !ONB.data.name){ document.getElementById('onbErr').innerHTML='<div class="err-box">Please enter a name.</div>'; return; }
+  if(ONB.step < ONB_STEPS.length-1){ ONB.step++; renderOnb(); return; }
+  // finish
+  const btn=document.getElementById('onbNext'); btn.disabled=true; btn.textContent='Setting up…';
+  try{
+    await j('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      account_type:ONB.type, name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
+      relation:ONB.data.relation||null, city:ONB.data.city||null, profile:ONB.profile })});
+    document.getElementById('onbOverlay').classList.remove('open');
+    window._acctType=null;
+    await boot();
+  }catch(e){
+    document.getElementById('onbErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>';
+    btn.disabled=false; btn.textContent='Finish';
+  }
+}
+
+// adapt the interface to the care profile (eyesight → text size)
+async function applyProfileAdaptations(){
+  try{
+    const p = await j('/api/parents/'+PARENT.id+'/profile');
+    PROFILE = p || {};
+    const size = p.text_size || (p.eyesight==='poor'?'large':'normal');
+    document.body.classList.remove('ts-large','ts-xlarge');
+    if(size==='large') document.body.classList.add('ts-large');
+    if(size==='xlarge') document.body.classList.add('ts-xlarge');
+  }catch(e){ PROFILE={}; }
+}
+// dependents see a simplified version of the same app
+// allow-list: only the screens that are about THEIR day, not family management
+const DEPENDENT_VIEWS = ['me','messages','appts','meds','vault','compare','trends',
+  'getcare','emergency','team','activities','wellness','details','docs','detail','vitals','timeline'];
+function applyDependentMode(){
+  document.body.classList.toggle('dependent-mode', !!IS_DEPENDENT);
+  // show/hide each nav item (JS is the single source of truth)
+  document.querySelectorAll('.side-btn[data-v]').forEach(btn=>{
+    const v = btn.dataset.v;
+    let allowed;
+    if(IS_DEPENDENT) allowed = DEPENDENT_VIEWS.includes(v);
+    else allowed = !btn.classList.contains('dep-only');   // family never sees the elder's own screen
+    btn.style.display = allowed ? 'flex' : 'none';
+  });
+  // action buttons without data-v (e.g. Upload Report) stay visible —
+  // their own permission tags decide whether they're usable
+  document.querySelectorAll('.side-btn:not([data-v])').forEach(btn=>{
+    btn.style.display = 'flex';
+  });
+  // hide any section header that has no visible buttons left
+  document.querySelectorAll('.side-sec').forEach(sec=>{
+    let any=false, el=sec.nextElementSibling;
+    while(el && !el.classList.contains('side-sec')){
+      if(el.classList.contains('side-btn') && el.style.display!=='none'){ any=true; break; }
+      el=el.nextElementSibling;
+    }
+    sec.style.display = any ? '' : 'none';
+  });
+}
+
+async function loadReports(){
+  REPORTS = await j('/api/parents/'+PARENT.id+'/reports');
+  renderVault();
+}
+
+function renderVault(){
+  document.getElementById('vaultCount').textContent = REPORTS.length;
+  document.getElementById('reportTotal').textContent = REPORTS.length;
+  // scores from the newest report
+  const latest = REPORTS[0];
+  let scoreHtml = '';
+  if(latest){
+    const total = latest.params.length;
+    const ok = latest.flags.ok;
+    const overall = total? Math.round(ok/total*100) : 0;
+    const a1c = latest.params.find(p=>p.name==='HbA1c');
+    const metabolic = a1c? Math.max(20, Math.round(100-(a1c.value-5.7)*22)) : 70;
+    const scores = [
+      {l:'Overall Health', v:overall, u:'/100', c:'var(--sage)', t:'from latest report', tc:'tup', w:overall},
+      {l:'Metabolic (sugar)', v:metabolic, u:'/100', c:'var(--gold)', t:a1c?('HbA1c '+a1c.value+'%'):'-', tc:'tup', w:metabolic},
+      {l:'In-range values', v:ok, u:'/'+total, c:'var(--blue)', t:latest.flags.high+' high · '+latest.flags.low+' low', tc:'twatch', w:total?Math.round(ok/total*100):0},
+      {l:'Reports stored', v:REPORTS.length, u:'', c:'var(--rust)', t:'in PostgreSQL', tc:'tup', w:100}
+    ];
+    scoreHtml = scores.map(s=>'<div class="score-card"><div class="sl">'+s.l+'</div><div class="score-val">'+s.v+'<small>'+s.u+'</small></div><div class="score-bar"><div class="score-fill" style="width:'+s.w+'%;background:'+s.c+';"></div></div><div class="score-trend '+s.tc+'">'+s.t+'</div></div>').join('');
+  }
+  document.getElementById('scoreRow').innerHTML = scoreHtml;
+
+  let html='';
+  for(const rep of REPORTS){
+    let flagHtml = '<span class="flag flag-ok">'+rep.flags.ok+' in range</span>';
+    if(rep.flags.high) flagHtml += '<span class="flag flag-high">'+rep.flags.high+' high</span>';
+    if(rep.flags.low) flagHtml += '<span class="flag flag-watch">'+rep.flags.low+' low</span>';
+    html += '<div class="tl-group"><div class="tl-date"><span class="dot"></span><h3>'+fmtDate(rep.report_date)+'</h3><span class="count">· '+esc(rep.lab_name||'')+'</span></div>'
+      + '<div class="report-card" onclick="showDetail(\''+rep.id+'\')">'
+      + '<div class="rc-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C84B2F" stroke-width="2"><path d="M9 2v6l-4 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-4-8V2"/><path d="M7 2h10"/></svg></div>'
+      + '<div class="rc-info"><div class="rc-title">'+esc(rep.report_type)+'</div><div class="rc-meta">'+rep.params.length+' values · '+esc(rep.doctor_name||'-')+'</div></div>'
+      + '<div class="rc-flags">'+flagHtml+'</div></div></div>';
+  }
+  document.getElementById('timeline').innerHTML = html || '<div class="psub">No reports yet. Upload one to begin.</div>';
+}
+
+async function showDetail(id){
+  const rep = await j('/api/reports/'+id);
+  let rows = rep.params.map(p=>{
+    let rangeTxt='—';
+    if(p.range){
+      if(p.range.text) rangeTxt = esc(p.range.text)+(p.range.unit?' '+esc(p.range.unit):'');
+      else {
+        const lo = isFinite(p.range.min)? p.range.min : null, hi = isFinite(p.range.max)? p.range.max : null;
+        rangeTxt = (lo!==null&&hi!==null) ? lo+'–'+hi : (hi!==null? '< '+hi : (lo!==null? '> '+lo : '—'));
+        if(p.range.unit) rangeTxt += ' '+esc(p.range.unit);
+      }
+      if(p.range.source==='report') rangeTxt += ' <span class="rng-src">from report</span>';
+    }
+    return '<div class="param-row"><div class="param-name">'+esc(p.name)+'</div><div class="param-val">'+p.value+' <span style="font-size:11px;color:var(--ink-faint);font-family:var(--font-body);font-weight:400;">'+esc(p.unit||'')+'</span></div><div style="color:var(--ink-faint);font-size:12px;">'+rangeTxt+'</div><div><span class="param-status '+statusCls(p.status)+'">'+statusLabel(p.status)+'</span></div></div>';
+  }).join('');
+  const viewBtn = rep.has_file
+    ? '<a href="/api/reports/'+rep.id+'/file" target="_blank" class="btn-out" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none;margin-bottom:1.25rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> View original '+(rep.file_name?('· '+esc(rep.file_name)):'document')+'</a>'
+    : '';
+  document.getElementById('detailContent').innerHTML =
+    '<div class="page-eyebrow">'+fmtDate(rep.report_date)+'</div><h1 class="pt" style="font-size:26px;">'+esc(rep.report_type)+'</h1><p style="font-size:13.5px;color:var(--ink-faint);margin-bottom:1rem;">'+esc(rep.lab_name||'-')+' · '+esc(rep.doctor_name||'-')+'</p>'
+    + '<div id="repAnalysis"></div>'
+    + viewBtn
+    + '<div class="param-table"><div class="param-row head"><div>Parameter</div><div>Value</div><div>Reference range</div><div>Status</div></div>'+rows+'</div>';
+  nav_('detail');
+  loadAnalysis(id);
+}
+
+// plain-English read of the report, with a measured recommendation
+const DEG={marked:'well outside',notable:'outside',slight:'slightly outside'};
+async function loadAnalysis(id){
+  const host=document.getElementById('repAnalysis'); if(!host) return;
+  let a;
+  try{ a = await j('/api/reports/'+id+'/analysis'); }catch(e){ return; }
+  const chips = a.flagged.map(f=>
+    '<span class="an-chip an-'+esc(f.degree)+'">'+esc(f.name)+' <strong>'+f.value+'</strong> '+esc(f.unit)
+    + ' <span class="an-deg">'+esc(DEG[f.degree])+'</span></span>').join('');
+  host.innerHTML =
+    '<div class="an-box an-lvl-'+esc(a.level)+'">'
+    + '<div class="an-head"><span class="an-dot"></span>'+esc(a.headline)+'</div>'
+    + (chips?'<div class="an-chips">'+chips+'</div>':'')
+    + '<div class="an-advice">'+esc(a.advice)+'</div>'
+    + '<div class="an-meta">'+a.in_range+' value'+(a.in_range===1?'':'s')+' in range'
+      + (a.unreadable? ' · '+a.unreadable+' without a reference range':'')+'</div>'
+    + (window.AI_ON!==false? '<button class="an-explain" onclick="explainReport(\''+id+'\')">Explain this simply</button>':'')
+    + '<div class="an-ai" id="anAi" style="display:none;"></div>'
+    + '<div class="an-disc">'+esc(a.disclaimer)+'</div>'
+    + '</div>';
+}
+async function explainReport(id){
+  const box=document.getElementById('anAi'); box.style.display='block'; box.textContent='Reading it over…';
+  try{
+    const d=await j('/api/reports/'+id+'/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    box.textContent = d.summary || d.error || 'Add an Anthropic API key in .env to enable this.';
+  }catch(e){ box.textContent='Unavailable right now.'; }
+}
+
+function buildCompare(){
+  const opts = [...REPORTS].sort((a,b)=>a.report_date.localeCompare(b.report_date))
+    .map(r=>'<option value="'+r.id+'">'+fmtDate(r.report_date)+' - '+esc(r.report_type)+'</option>').join('');
+  const a=document.getElementById('cmpA'), b=document.getElementById('cmpB');
+  a.innerHTML=opts; b.innerHTML=opts;
+  const sorted=[...REPORTS].sort((x,y)=>x.report_date.localeCompare(y.report_date));
+  if(sorted.length>=2){ a.value=sorted[0].id; b.value=sorted[sorted.length-1].id; }
+  // AI summary panel is optional — soften it when there's no key
+  const aiPanel=document.querySelector('.cmp-ai');
+  if(aiPanel){
+    if(window.AI_ON===false){
+      aiPanel.querySelector('#cmpAiText').textContent='Optional: add an Anthropic API key (.env) to get a plain-English summary. The comparison below is complete without it.';
+      const gen=aiPanel.querySelector('.btn-gen'); if(gen) gen.style.display='none';
+    } else {
+      const gen=aiPanel.querySelector('.btn-gen'); if(gen) gen.style.display='';
+    }
+  }
+  runCompare();
+}
+
+async function runCompare(){
+  const a=document.getElementById('cmpA').value, b=document.getElementById('cmpB').value;
+  if(!a||!b) return;
+  const data = await j('/api/compare?a='+a+'&b='+b);
+  let rows = '<div class="cmp-row head"><div>Parameter</div><div>Before</div><div>After</div><div>Change</div></div>';
+  for(const r of data.rows){
+    const cls = r.improving===null ? '' : (r.improving?'tup':'tdown');
+    const arrow = r.after>r.before?'&#9650;':(r.after<r.before?'&#9660;':'-');
+    rows += '<div class="cmp-row"><div class="param-name">'+esc(r.name)+'</div>'
+      + '<div><span class="param-status '+statusCls(r.before_status)+'" style="font-size:10px;">'+r.before+'</span></div>'
+      + '<div><span class="param-status '+statusCls(r.after_status)+'" style="font-size:10px;">'+r.after+'</span></div>'
+      + '<div class="cmp-change '+cls+'">'+arrow+' '+Math.abs(r.change_pct).toFixed(0)+'%</div></div>';
+  }
+  let extra='';
+  if((data.only_later&&data.only_later.length)||(data.only_earlier&&data.only_earlier.length)){
+    const one=(list,label)=> list.length? '<div class="cmp-only"><h4>Only in the '+label+' report</h4>'
+      + list.map(p=>'<div class="cmp-only-row"><span>'+esc(p.name)+'</span><span class="param-status '+statusCls(p.status)+'">'+p.value+' '+esc(p.unit||'')+'</span></div>').join('')
+      + '</div>' : '';
+    extra = '<div class="cmp-note">These two reports test different things, so only the shared parameters can be compared.</div>'
+      + one(data.only_later||[],'later') + one(data.only_earlier||[],'earlier');
+  }
+  document.getElementById('cmpTable').innerHTML = rows + extra;
+}
+
+async function genSummary(){
+  const a=document.getElementById('cmpA').value, b=document.getElementById('cmpB').value;
+  const box=document.getElementById('cmpAiText');
+  box.textContent='Analysing...';
+  try{
+    const data = await j('/api/compare/summary', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({a,b})});
+    if(data.summary){ box.textContent = data.summary; }
+    else if(data.no_key){ box.textContent = 'AI summaries need an Anthropic API key. Add ANTHROPIC_API_KEY to your .env to enable them — the comparison above is fully accurate without it.'; }
+    else { box.textContent = data.error || 'The AI summary is unavailable right now. The comparison above is still accurate.'; }
+  }catch(e){ box.textContent = 'The AI summary is unavailable right now. The comparison above is still accurate.'; }
+}
+
+async function buildTrends(){
+  const trends = await j('/api/parents/'+PARENT.id+'/trends');
+  const key=['HbA1c','Fasting Glucose','Total Cholesterol','LDL Cholesterol','Vitamin D','Hemoglobin'];
+  let html='';
+  for(const t of trends){
+    if(!key.includes(t.name)) continue;
+    if(t.points.length===0) continue;
+    const latest=t.points[t.points.length-1].value;
+    html += '<div class="trend-card"><div class="trend-head"><h4>'+esc(t.name)+'</h4><div style="text-align:right;"><span class="trend-latest">'+latest+'</span> <span class="trend-unit">'+esc(t.range?t.range.unit:'')+'</span></div></div>'
+      + (t.range?('<div style="font-size:11.5px;color:var(--ink-faint);">healthy '+t.range.min+'-'+t.range.max+'</div>'):'')
+      + '<div style="margin-top:0.8rem;">'+lineChart(t.points, t.range)+'</div></div>';
+  }
+  document.getElementById('trendGrid').innerHTML = html || '<div class="psub">Upload at least one report to see trends.</div>';
+}
+
+function lineChart(pts, range){
+  const W=280,H=90,pad=10;
+  const vals=pts.map(p=>p.value); let mn=Math.min(...vals),mx=Math.max(...vals);
+  if(range){ mn=Math.min(mn,range.min); mx=Math.max(mx,range.max); }
+  const span=(mx-mn)||1;
+  const x=i=>pad+i*((W-2*pad)/Math.max(1,(pts.length-1)));
+  const y=v=>H-pad-((v-mn)/span)*(H-2*pad);
+  const poly=pts.map((p,i)=>x(i)+','+y(p.value)).join(' ');
+  const dots=pts.map((p,i)=>'<circle cx="'+x(i)+'" cy="'+y(p.value)+'" r="3.5" fill="#C84B2F"/>').join('');
+  let band='';
+  if(range){ const yt=y(range.max), yb=y(range.min); band='<rect x="0" y="'+Math.min(yt,yb)+'" width="'+W+'" height="'+Math.abs(yb-yt)+'" fill="#D4E0D2" opacity="0.5"/>'; }
+  return '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;">'+band+'<polyline points="'+poly+'" fill="none" stroke="#C84B2F" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>'+dots+'</svg>';
+}
+
+function askSuggest(el){ document.getElementById('chatInput').value=el.textContent; sendChat(); }
+async function sendChat(){
+  const input=document.getElementById('chatInput'); const q=input.value.trim(); if(!q)return;
+  const box=document.getElementById('chatMsgs');
+  box.innerHTML += '<div class="msg user">'+esc(q)+'</div>';
+  input.value='';
+  const thinking=document.createElement('div'); thinking.className='msg bot'; thinking.textContent='...';
+  box.appendChild(thinking); box.scrollTop=box.scrollHeight;
+  try{
+    const data = await j('/api/parents/'+PARENT.id+'/chat', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({question:q})});
+    if(data.answer) thinking.textContent = data.answer;
+    else if(data.no_key) thinking.textContent = 'The Ask AI chat needs an Anthropic API key. Add ANTHROPIC_API_KEY to your .env to turn it on — everything else in the app works without it.';
+    else thinking.textContent = data.error || 'The assistant is unavailable right now.';
+  }catch(e){ thinking.textContent = 'The assistant is unavailable right now.'; }
+  box.scrollTop=box.scrollHeight;
+}
+
+// ═══════════ MEDICATIONS ═══════════
+const SLOT_LABEL = {morning:'Morning', afternoon:'Afternoon', night:'Night'};
+const SLOT_ICON = {morning:'🌅', afternoon:'☀️', night:'🌙'};
+const SLOT_WHEN = {morning:'before 12 noon', afternoon:'12 noon – 5 pm', night:'after 5 pm'};
+async function loadMeds(){
+  const today = await j('/api/parents/'+PARENT.id+'/medications/today');
+  document.getElementById('medsBadge').textContent = today.adherence+'%';
+  document.getElementById('medsScore').innerHTML =
+    scoreCard('Adherence today', today.adherence, '/100', 'var(--sage)', today.adherence, today.done+' of '+today.due+' doses')
+    + scoreCard('Doses due today', today.due, '', 'var(--rust)', 100, 'across all slots')
+    + scoreCard('Doses taken', today.done, '', 'var(--blue)', today.due?Math.round(today.done/today.due*100):0, 'ticked by caregiver');
+  let html='';
+  for(const slot of ['morning','afternoon','night']){
+    const items = today.schedule[slot];
+    if(!items.length) continue;
+    const slotTimes=[...new Set(items.map(x=>x.time).filter(Boolean))].join(', ');
+    html += '<div class="med-slot"><div class="med-slot-head">'+SLOT_ICON[slot]+' '+SLOT_LABEL[slot]
+      + '<span class="slot-when">'+(slotTimes||SLOT_WHEN[slot])+'</span></div>';
+    for(const m of items){
+      const tt = m.time ? '<span class="med-time-badge">⏰ '+esc(m.time)+'</span>' : '';
+      html += '<div class="med-item"><div class="med-check '+(m.taken?'on':'')+'" onclick="toggleDose(\''+m.id+'\',\''+slot+'\','+(!m.taken)+')"><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div>'
+        + '<div style="flex:1;"><div class="med-name '+(m.taken?'done':'')+'">'+esc(m.name)+' <span class="med-sub">'+esc(m.dosage||'')+'</span> '+tt+'</div>'
+        + (m.notes?'<div class="med-sub">'+esc(m.notes)+'</div>':'')+'</div></div>';
+    }
+    html += '</div>';
+  }
+  document.getElementById('medsToday').innerHTML = html || '<div class="psub">No medicines scheduled. Add one below.</div>';
+
+  const all = await j('/api/parents/'+PARENT.id+'/medications');
+  document.getElementById('medsList').innerHTML = all.map(m=>{
+    const slots = ['morning','afternoon','night'].filter(s=>m['slot_'+s]).map(s=>'<span class="slot-badge">'+SLOT_LABEL[s]+'</span>').join('');
+    const DAYN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const timeStr = (m.times&&m.times.length)?'<span class="slot-badge">⏰ '+m.times.join(', ')+'</span>':'';
+    const dayStr = (m.days_of_week&&m.days_of_week.length&&m.days_of_week.length<7)?'<span class="slot-badge">'+m.days_of_week.map(d=>DAYN[d]).join(', ')+'</span>':'';
+    return '<div class="med-row"><div><span class="med-name">'+esc(m.name)+'</span> <span class="med-sub">'+esc(m.dosage||'')+'</span> '+slots+timeStr+dayStr+(m.notes?' <span class="med-sub">· '+esc(m.notes)+'</span>':'')+'</div><button class="med-edit" data-req="meds" onclick="editMed(\''+m.id+'\')">Edit</button> <button class="med-del" data-req="meds" onclick="delMed(\''+m.id+'\')">Remove</button></div>';
+  }).join('') || '';
+}
+function scoreCard(label,val,unit,color,width,trend){
+  return '<div class="score-card"><div class="sl">'+label+'</div><div class="score-val">'+val+'<small>'+unit+'</small></div><div class="score-bar"><div class="score-fill" style="width:'+width+'%;background:'+color+';"></div></div><div class="score-trend" style="color:var(--ink-faint);">'+trend+'</div></div>';
+}
+async function toggleDose(medId, slot, taken){
+  await j('/api/medications/'+medId+'/log', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({slot,taken})});
+  loadMeds();
+}
+async function delMed(id){ if(!confirm('Remove this medicine?'))return; await j('/api/medications/'+id,{method:'DELETE'}); loadMeds(); }
+function openAddMed(){
+  EDIT_MED_ID=null;
+  document.querySelector('#medModal h2').textContent='Add a medicine';
+  document.querySelector('#medModal .btn-primary').textContent='Add medicine';
+  document.getElementById('medModal').classList.add('open');
+  document.getElementById('medName').value=''; document.getElementById('medDose').value=''; document.getElementById('medNote').value='';
+  document.querySelectorAll('#medSlots .dchip').forEach(c=>c.classList.remove('sel'));
+  document.querySelectorAll('#medFreq .dchip').forEach((c,i)=>c.classList.toggle('sel',i===0));
+  document.querySelectorAll('#medDays .dchip').forEach(c=>c.classList.remove('sel'));
+  document.getElementById('medDays').style.display='none';
+  document.getElementById('medTimes').innerHTML=''; addTimeRow('08:00');
+}
+function pickFreq(btn){
+  btn.parentElement.querySelectorAll('.dchip').forEach(c=>c.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById('medDays').style.display = btn.dataset.f==='custom' ? 'flex' : 'none';
+}
+function addTimeRow(val){
+  const host=document.getElementById('medTimes');
+  const row=document.createElement('div');
+  row.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px;';
+  row.innerHTML='<input type="time" class="chat-input med-time" value="'+(val||'')+'" style="background:var(--white);flex:1;">'
+    + '<button type="button" class="med-del" onclick="this.parentElement.remove()">Remove</button>';
+  host.appendChild(row);
+}
+function closeAddMed(){ document.getElementById('medModal').classList.remove('open'); }
+async function saveMed(){
+  const name=document.getElementById('medName').value.trim();
+  if(!name){ document.getElementById('medName').focus(); return; }
+  const slots={slot_morning:false,slot_afternoon:false,slot_night:false};
+  document.querySelectorAll('#medSlots .dchip.sel').forEach(c=>slots['slot_'+c.dataset.slot]=true);
+  const times=[...document.querySelectorAll('.med-time')].map(i=>i.value).filter(Boolean);
+  const freqBtn=document.querySelector('#medFreq .dchip.sel');
+  const frequency=freqBtn?freqBtn.dataset.f:'daily';
+  let days=null;
+  if(frequency==='weekdays') days=[1,2,3,4,5];
+  else if(frequency==='custom') days=[...document.querySelectorAll('#medDays .dchip.sel')].map(c=>+c.dataset.d);
+  // if only times were given, infer the slots so the tick-list still works
+  if(!slots.slot_morning && !slots.slot_afternoon && !slots.slot_night){
+    for(const t of times){ const h=+t.split(':')[0]; if(h<12)slots.slot_morning=true; else if(h<17)slots.slot_afternoon=true; else slots.slot_night=true; }
+  }
+  const payload={name,dosage:document.getElementById('medDose').value.trim(),notes:document.getElementById('medNote').value.trim(),
+        times, days_of_week:days, frequency, ...slots};
+  try{
+    if(EDIT_MED_ID){
+      await j('/api/medications/'+EDIT_MED_ID,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      toast('Medicine updated.','success');
+    } else {
+      await j('/api/parents/'+PARENT.id+'/medications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      toast('Medicine added with reminders.','success');
+    }
+    closeAddMed(); loadMeds();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ DAILY CARE & FAMILY ═══════════
+let dlSel = {mood:null, ate:null, sleep:null};
+async function loadDaily(){
+  dlSel={mood:null,ate:null,sleep:null};
+  document.querySelectorAll('#view-daily .dchip').forEach(c=>c.classList.remove('sel'));
+  ['dlBp','dlSugar','dlNotes'].forEach(id=>document.getElementById(id).value='');
+  const logs = await j('/api/parents/'+PARENT.id+'/logs');
+  document.getElementById('familyFeed').innerHTML = logs.map(l=>{
+    const tags=[];
+    if(l.mood)tags.push(l.mood); if(l.ate_well)tags.push('ate: '+l.ate_well);
+    if(l.bp)tags.push('BP '+l.bp); if(l.sugar)tags.push('sugar '+l.sugar);
+    return '<div class="feed-item"><div class="feed-date">'+fmtDate(l.log_date)+'</div><div class="feed-text">'+esc(l.family_update||l.notes||'')+'</div>'
+      + '<div class="feed-meta">'+tags.map(t=>'<span class="feed-tag">'+esc(t)+'</span>').join('')+'</div></div>';
+  }).join('') || '<div class="psub">No updates yet. Send today\'s check-in.</div>';
+}
+async function submitLog(){
+  const body={ mood:dlSel.mood, ate_well:dlSel.ate, sleep_quality:dlSel.sleep, bp:document.getElementById('dlBp').value.trim(), sugar:document.getElementById('dlSugar').value.trim(), notes:document.getElementById('dlNotes').value.trim() };
+  try{
+    await j('/api/parents/'+PARENT.id+'/logs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    loadDaily();
+  }catch(e){ document.getElementById('dlErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
+}
+
+// ═══════════ EMERGENCY CARD ═══════════
+async function loadEmergency(){
+  const c = await j('/api/parents/'+PARENT.id+'/emergency-card');
+  const meds = c.medications.map(m=>m.name+(m.dosage?' ('+m.dosage+')':'')).join(', ') || '—';
+  const contacts = c.contacts.map(ct=>ct.name+(ct.relation?' ('+ct.relation+')':'')+(ct.phone?' · '+ct.phone:'')).join('<br>') || '—';
+  const primary = c.contacts.find(ct=>ct.is_primary) || c.contacts[0];
+  // SOS: one-tap calls (tel: links dial on a phone)
+  let sos = '<div class="sos-box"><div class="sos-head">🚨 SOS — Call for help</div><div class="sos-btns">';
+  if(primary && primary.phone) sos += '<a class="sos-btn" href="tel:'+esc(primary.phone.replace(/\s/g,''))+'"><span class="sos-lbl">'+esc(primary.name)+'</span><span class="sos-sub">Family · '+esc(primary.phone)+'</span></a>';
+  if(c.doctor_phone) sos += '<a class="sos-btn" href="tel:'+esc(c.doctor_phone.replace(/\s/g,''))+'"><span class="sos-lbl">'+esc(c.doctor||'Doctor')+'</span><span class="sos-sub">Doctor · '+esc(c.doctor_phone)+'</span></a>';
+  sos += '<a class="sos-btn sos-amb" href="tel:108"><span class="sos-lbl">Ambulance</span><span class="sos-sub">Call 108</span></a>';
+  sos += '</div><button class="sos-alert" onclick="raiseSOS()">Alert my family in the app</button></div>';
+  document.getElementById('emCard').innerHTML =
+    sos
+    + '<div class="em-card"><div class="em-head"><div><div class="em-title">'+esc(c.name)+'</div><div class="med-sub">'+(c.age?c.age+' years':'')+'</div></div>'
+    + (c.blood_group?'<div class="em-blood">'+esc(c.blood_group)+'</div>':'')+'</div>'
+    + emRow('Medical conditions', c.conditions)
+    + emRow('Allergies', c.allergies)
+    + emRow('Current medicines', meds)
+    + emRow('Doctor', (c.doctor||'—')+(c.doctor_phone?' · '+c.doctor_phone:''))
+    + emRow('Emergency contacts', contacts)
+    + '</div>';
+}
+async function raiseSOS(){
+  try{
+    await j('/api/parents/'+PARENT.id+'/alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({severity:'sos',message:'SOS raised from the emergency card — please check on '+PARENT.name+' immediately.'})});
+    toast('Your family has been alerted.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+function emRow(k,v){ return '<div class="em-row"><div class="em-k">'+k+'</div><div class="em-v">'+(v||'—')+'</div></div>'; }
+
+// chip group handlers (daily + med slots)
+document.addEventListener('click', function(e){
+  const chip = e.target.closest('.dchip'); if(!chip) return;
+  if(chip.dataset.g){ // single-select daily groups
+    chip.parentElement.querySelectorAll('.dchip').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel');
+    dlSel[chip.dataset.g]=chip.dataset.v;
+  } else if(chip.dataset.slot){ // multi-select med slots
+    chip.classList.toggle('sel');
+  } else if(chip.dataset.f){ // booking frequency single-select
+    chip.parentElement.querySelectorAll('.dchip').forEach(c=>c.classList.remove('sel'));
+    chip.classList.add('sel');
+    bookCtx.freq=chip.dataset.f;
+  }
+});
+
+// ═══════════ PARENT MONITOR ═══════════
+async function loadMonitor(){
+  let m;
+  try{ m = await j('/api/parents/'+PARENT.id+'/monitor'); }
+  catch(e){ document.getElementById('monitorBody').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  const upd = m.today && m.today.family_update ? m.today.family_update : 'No update logged yet today. The caregiver can add one in Daily Care.';
+  const mood = m.today && m.today.mood ? m.today.mood : null;
+  const vitalCards = m.key_vitals.map(v=>{
+    const cls = v.status==='ok'?'flag-ok':(v.status==='high'?'flag-high':'flag-watch');
+    return '<div class="mon-vital"><div class="k">'+esc(v.name)+'</div><div class="v">'+v.value+' <span style="font-size:12px;color:var(--ink-faint);font-family:var(--font-body);">'+esc(v.unit||'')+'</span></div><span class="param-status '+cls+'" style="font-size:10px;margin-top:5px;display:inline-block;">'+(v.status==='ok'?'In range':v.status)+'</span></div>';
+  }).join('') || '<div class="mon-vital"><div class="k">Vitals</div><div class="v" style="font-size:15px;">No reports yet</div></div>';
+  const team = m.care_team.map(t=>t.name+' ('+t.role+')').join(', ') || '—';
+  let alertHtml='';
+  if(m.alerts && m.alerts.length){
+    alertHtml = '<div id="alertZone"></div>';
+    loadAlertZone();
+  }
+  // insights (loaded separately, rendered into #insightsPanel)
+  loadInsights();
+  document.getElementById('monitorBody').innerHTML =
+    alertHtml
+    + '<div id="insightsPanel"></div>'
+    + '<div class="mon-grid">'
+    + '<div class="mon-hero"><div class="lbl">Today\'s update</div><div class="upd">'+esc(upd)+'</div>'+(mood?'<div class="mon-mood">Mood: '+esc(mood)+'</div>':'')+'</div>'
+    + '<div class="mon-tiles">'
+      + monTile('var(--rust-light)','#C84B2F','M10.5 20.5 3.5 13.5a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7z','Medicines today', m.medication.done+' / '+m.medication.due+' taken', m.medication.adherence+'% adherence')
+      + monTile('var(--sage-light)','#4A6741','M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2||9|7|4','Care team', m.care_team.length+' people', team)
+    + '</div></div>'
+    + '<div class="mon-row">'+vitalCards+'</div>'
+    + '<div class="mon-tile" style="margin-bottom:0.9rem;"><div class="mon-ic" style="background:var(--blue-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3A5A78" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div><div class="k">Next appointment'+(m.overdue_count?' · <span style="color:var(--red);">'+m.overdue_count+' overdue</span>':'')+'</div><div class="v" style="font-size:16px;">'+(m.next_appointment? esc(m.next_appointment.title)+' — '+fmtDate(m.next_appointment.appt_date)+(m.next_appointment.appt_time?', '+esc(m.next_appointment.appt_time):'') : 'None upcoming')+'</div></div><button class="btn-sm" style="margin-left:auto;background:var(--ink);color:white;border:none;padding:8px 16px;border-radius:10px;font-size:13px;" onclick="nav_(\'appts\')">View</button></div>'
+    + '<div class="mon-tile"><div class="mon-ic" style="background:var(--gold-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8860B" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div><div><div class="k">Next scheduled service</div><div class="v" style="font-size:16px;">'+(m.next_service? esc(m.next_service.service_type)+' — '+esc(m.next_service.preferred_date||'') : 'Nothing scheduled')+'</div></div><button class="btn-sm" style="margin-left:auto;background:var(--ink);color:white;border:none;padding:8px 16px;border-radius:10px;font-size:13px;" onclick="nav_(\'team\')">Book care</button></div>';
+}
+function monTile(bg,stroke,path,k,v,sub){
+  // path may embed circle coords after || for the people icon; keep simple: just draw path
+  const p = path.split('||')[0];
+  const circle = path.includes('||') ? '<circle cx="9" cy="7" r="4"/>' : '';
+  return '<div class="mon-tile"><div class="mon-ic" style="background:'+bg+';"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="'+stroke+'" stroke-width="2"><path d="'+p+'"/>'+circle+'</svg></div><div style="flex:1;"><div class="k">'+k+'</div><div class="v">'+v+'</div><div class="k" style="margin-top:2px;">'+esc(sub)+'</div></div></div>';
+}
+
+// ═══════════ CARE TEAM ═══════════
+const SERVICES = [
+  {t:'caregiver', label:'Caregiver', d:'Daily help & company', p:'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2'},
+  {t:'nurse', label:'Nurse', d:'Medical care at home', p:'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'},
+  {t:'physiotherapist', label:'Physiotherapist', d:'Recovery & mobility', p:'M12 2v20M2 12h20'},
+  {t:'companion', label:'Companion', d:'Conversation & outings', p:'M12 8a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM20 21a8 8 0 0 0-16 0'}
+];
+async function loadTeam(){
+  const team = await j('/api/parents/'+PARENT.id+'/care-team');
+  document.getElementById('teamList').innerHTML = team.map(t=>{
+    const stars = t.rating ? '<div class="r"><span>★</span> '+(+t.rating).toFixed(1)+'</div>' : '';
+    return '<div class="team-card"><div class="team-av">'+esc(t.name[0])+'</div><div><div class="team-name">'+esc(t.name)+'</div><div class="team-role">'+esc(t.role)+'</div></div><div class="team-rating">'+stars+(t.since?'<div class="team-since">since '+fmtDate(t.since)+'</div>':'')+'</div></div>';
+  }).join('') || '<div class="psub">No care team yet.</div>';
+  document.getElementById('bookGrid').innerHTML = SERVICES.map(s=>
+    '<div class="book-card" onclick="bookService(\''+s.t+'\')"><div class="book-ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C84B2F" stroke-width="2"><path d="'+s.p+'"/></svg></div><h4>'+s.label+'</h4><p>'+s.d+'</p></div>').join('');
+  const reqs = await j('/api/parents/'+PARENT.id+'/service-requests');
+  document.getElementById('reqList').innerHTML = reqs.map(r=>
+    '<div class="req-row"><span style="text-transform:capitalize;font-weight:500;">'+esc(r.service_type)+'</span><span style="color:var(--ink-faint);">'+esc(r.frequency||'')+(r.preferred_date?' · '+esc(r.preferred_date):'')+'</span><span class="req-status st-'+esc(r.status)+'">'+esc(r.status)+'</span></div>').join('') || '<div class="psub">No requests yet.</div>';
+}
+async function bookService(type){
+  openBook(type, type.charAt(0).toUpperCase()+type.slice(1), {desc:'', after:'team'});
+}
+
+// ═══════════ ACTIVITIES (Moh TV) ═══════════
+let ALL_ACT = [];
+async function loadActivities(){
+  if(ALL_ACT.length===0) ALL_ACT = await j('/api/activities');
+  const cats = ['All', ...new Set(ALL_ACT.map(a=>a.category))];
+  const active = window._actCat || 'All';
+  document.getElementById('actCats').innerHTML = cats.map(c=>
+    '<button class="dchip '+(c===active?'sel':'')+'" onclick="filterAct(\''+c+'\')">'+esc(c)+'</button>').join('');
+  const list = active==='All' ? ALL_ACT : ALL_ACT.filter(a=>a.category===active);
+  document.getElementById('actGrid').innerHTML = list.map(a=>
+    '<div class="act-card"><div class="act-thumb" onclick="playAct(this,\''+a.youtube_id+'\')">'
+    + '<img src="https://img.youtube.com/vi/'+a.youtube_id+'/hqdefault.jpg" alt="'+esc(a.title)+'" loading="lazy">'
+    + '<div class="act-play"><span><svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg></span></div></div>'
+    + '<div class="act-body"><div class="act-cat">'+esc(a.category)+'</div><div class="act-title">'+esc(a.title)+'</div><div class="act-desc">'+esc(a.description||'')+'</div>'
+    + '<div class="act-meta">'+(a.level?'<span class="act-tag">'+esc(a.level)+'</span>':'')+(a.duration_min?'<span class="act-tag">'+a.duration_min+' min</span>':'')+'</div></div></div>').join('');
+}
+function filterAct(c){ window._actCat=c; loadActivities(); }
+function playAct(thumb, ytid){
+  thumb.outerHTML = '<iframe class="act-frame" src="https://www.youtube.com/embed/'+ytid+'?autoplay=1" allow="autoplay; encrypted-media" allowfullscreen></iframe>';
+}
+
+// ═══════════ GET CARE (log problem → solutions → book) ═══════════
+let CATALOGUE = {}, CONCERNS = [];
+async function loadGetcare(){
+  gcReset();
+  if(CONCERNS.length===0){
+    try{ const c = await j('/api/care-catalogue'); CATALOGUE=c.catalogue; CONCERNS=c.concerns; }catch(e){}
+  }
+  document.getElementById('gcConcerns').innerHTML = CONCERNS.map(c=>
+    '<button class="gc-concern" onclick="runTriage('+JSON.stringify(c).replace(/"/g,'&quot;')+')">'+esc(c)+'</button>').join('');
+  loadGcReqs();
+}
+function gcReset(){
+  document.getElementById('gcStep1').style.display='block';
+  document.getElementById('gcStep2').style.display='none';
+  const t=document.getElementById('gcText'); if(t)t.value='';
+  const e=document.getElementById('gcErr'); if(e)e.innerHTML='';
+}
+async function runTriage(concern){
+  const details = document.getElementById('gcText').value.trim();
+  const body = (typeof concern==='string') ? {concern} : {details};
+  if(!body.concern && !body.details){ document.getElementById('gcErr').innerHTML='<div class="err-box">Pick a concern or describe what\'s going on.</div>'; return; }
+  document.getElementById('gcErr').innerHTML='';
+  let data;
+  try{ data = await j('/api/parents/'+PARENT.id+'/triage', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}); }
+  catch(e){ document.getElementById('gcErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  document.getElementById('gcSummary').innerHTML = data.summary
+    ? '<div class="gc-sum-box">'+esc(data.summary)+'</div>' : '';
+  document.getElementById('gcRecs').innerHTML = '<h4 style="font-size:14px;font-weight:600;margin-bottom:1rem;">Recommended for you</h4>'
+    + data.recommendations.map(r=>
+      '<div class="gc-rec"><div class="gc-rec-main"><div class="gc-rec-title">'+esc(r.label)+'</div>'
+      + '<div class="gc-rec-why">'+esc(r.why||r.desc||'')+'</div></div>'
+      + '<button class="btn-primary gc-book-btn" onclick="openBook(\''+r.id+'\',\''+esc(r.label).replace(/'/g,"\\'")+'\')">Book</button></div>').join('');
+  document.getElementById('gcStep1').style.display='none';
+  document.getElementById('gcStep2').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+async function loadGcReqs(){
+  try{
+    const reqs = await j('/api/parents/'+PARENT.id+'/service-requests');
+    const host = document.getElementById('gcReqList');
+    if(host) host.innerHTML = reqs.map(r=>
+      '<div class="req-row"><span style="text-transform:capitalize;font-weight:500;">'+esc(r.service_type)+'</span><span style="color:var(--ink-faint);">'+esc(r.frequency||'')+(r.preferred_date?' · '+esc(r.preferred_date):'')+'</span><span class="req-status st-'+esc(r.status)+'">'+esc(r.status)+'</span></div>').join('') || '<div class="psub">No requests yet.</div>';
+  }catch(e){}
+}
+// booking modal (shared by Get Care recommendations and Care Team)
+let bookCtx = {slug:null,label:null,freq:'one-time',after:'getcare'};
+function openBook(slug,label,opts){
+  opts=opts||{};
+  bookCtx={slug,label,freq:'one-time',after:opts.after||'getcare'};
+  document.getElementById('bookTitle').textContent='Book: '+label;
+  document.getElementById('bookDesc').textContent = opts.desc!==undefined ? opts.desc : ((CATALOGUE[slug]&&CATALOGUE[slug].desc)||'');
+  document.getElementById('bookWhen').value=''; document.getElementById('bookNote').value='';
+  document.querySelectorAll('#bookFreq .dchip').forEach((c,i)=>c.classList.toggle('sel',i===0));
+  document.getElementById('bookModal').classList.add('open');
+}
+function closeBook(){ document.getElementById('bookModal').classList.remove('open'); }
+async function confirmBook(){
+  const body={ service_type: bookCtx.label, service_slug: bookCtx.slug, frequency: bookCtx.freq,
+    preferred_date: document.getElementById('bookWhen').value.trim(), notes: document.getElementById('bookNote').value.trim() };
+  try{
+    await j('/api/parents/'+PARENT.id+'/service-requests',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    closeBook();
+    toast('✓ '+bookCtx.label+' requested — our team will confirm shortly.','success');
+    if(bookCtx.after==='team'){ loadTeam(); }
+    else {
+      const rec=document.getElementById('gcRecs');
+      if(rec){ const done=document.createElement('div'); done.className='gc-booked'; done.innerHTML='✓ '+esc(bookCtx.label)+' requested — our team will confirm shortly.'; rec.prepend(done); }
+      loadGcReqs();
+    }
+  }catch(e){ toast('Could not book: '+e.message,'error'); }
+}
+
+// ═══════════ APPOINTMENTS ═══════════
+async function loadAppts(){
+  const list = await j('/api/parents/'+PARENT.id+'/appointments');
+  const today = new Date().toISOString().slice(0,10);
+  const upcoming = list.filter(a=>a.status==='upcoming');
+  const past = list.filter(a=>a.status!=='upcoming');
+  document.getElementById('apptBadge').textContent = upcoming.length || '';
+  document.getElementById('apptCount').textContent = upcoming.length+' upcoming';
+  const card = a=>{
+    const overdue = a.status==='upcoming' && a.appt_date.slice(0,10) < today;
+    const icon = a.kind==='reminder' ? '🔔' : '🩺';
+    return '<div class="appt-card'+(overdue?' appt-overdue':'')+'">'
+      + '<div class="appt-ic">'+icon+'</div>'
+      + '<div class="appt-main"><div class="appt-title">'+esc(a.title)+(overdue?' <span class="appt-flag">overdue</span>':'')+'</div>'
+      + '<div class="appt-meta">'+fmtDate(a.appt_date)+(a.appt_time?' · '+esc(a.appt_time):'')+(a.with_whom?' · '+esc(a.with_whom):'')+(a.location?' · '+esc(a.location):'')+'</div>'
+      + (a.notes?'<div class="appt-note">'+esc(a.notes)+'</div>':'')+'</div>'
+      + '<div class="appt-actions">'
+      + (a.status==='upcoming'
+          ? '<button class="appt-done" data-req="member" onclick="apptStatus(\''+a.id+'\',\'done\')">Mark done</button>'
+            + '<button class="appt-missed" data-req="member" onclick="apptStatus(\''+a.id+'\',\'missed\')">Missed</button>'
+          : '<span class="req-status st-'+esc(a.status)+'">'+esc(a.status)+'</span>'
+            + '<button class="appt-reopen" data-req="member" onclick="apptStatus(\''+a.id+'\',\'upcoming\')">Reopen</button>')
+      + '<button class="appt-edit" data-req="member" onclick="editAppt(\''+a.id+'\')">Edit</button>'
+      + '<button class="appt-del" data-req="member" onclick="delAppt(\''+a.id+'\')">Delete</button>'
+      + '</div></div>';
+  };
+  document.getElementById('apptUpcoming').innerHTML = upcoming.map(card).join('') || '<div class="psub">Nothing upcoming. Add a visit or reminder.</div>';
+  document.getElementById('apptPast').innerHTML = past.map(card).join('') || '<div class="psub" style="font-size:13px;">Nothing yet.</div>';
+  applyRoleUI();
+}
+async function apptStatus(id, status){
+  try{ await j('/api/parents/'+PARENT.id+'/appointments/'+id+'/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})}); loadAppts(); loadMonitor(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function editAppt(id){
+  const list = await j('/api/parents/'+PARENT.id+'/appointments');
+  const a = list.find(x=>x.id===id); if(!a) return;
+  const res = await formModal({
+    title:'Edit appointment', submitLabel:'Save changes',
+    fields:[
+      {id:'kind', label:'Type', options:[{label:'\ud83e\ude7a Appointment',value:'appointment'},{label:'\ud83d\udd14 Reminder',value:'reminder'}]},
+      {id:'title', label:'What is it?', value:a.title||''},
+      {id:'with_whom', label:'With whom', value:a.with_whom||''},
+      {id:'appt_date', label:'Date', type:'date', value:String(a.appt_date).slice(0,10)},
+      {id:'appt_time', label:'Time', value:a.appt_time||''},
+      {id:'location', label:'Where', value:a.location||''},
+      {id:'notes', label:'Notes', value:a.notes||''},
+    ],
+  });
+  if(!res || !res.title || !res.appt_date){ if(res) toast('Title and date are needed.','error'); return; }
+  try{
+    await j('/api/parents/'+PARENT.id+'/appointments/'+id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    loadAppts(); loadMonitor(); toast('Appointment updated.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+async function delAppt(id){
+  if(!confirm('Delete this appointment? This cannot be undone.')) return;
+  try{ await j('/api/parents/'+PARENT.id+'/appointments/'+id,{method:'DELETE'}); loadAppts(); loadMonitor(); toast('Deleted.','success'); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function openAddAppt(){
+  const res = await formModal({
+    title:'Add appointment or reminder',
+    submitLabel:'Add',
+    fields:[
+      {id:'kind', label:'Type', options:[{label:'🩺 Appointment',value:'appointment'},{label:'🔔 Reminder',value:'reminder'}]},
+      {id:'title', label:'What is it?', placeholder:'e.g. Cardiology follow-up'},
+      {id:'with_whom', label:'With whom (optional)', placeholder:'e.g. Dr. Mehta'},
+      {id:'appt_date', label:'Date', type:'date'},
+      {id:'appt_time', label:'Time (optional)', placeholder:'e.g. 11:30 AM'},
+      {id:'location', label:'Where (optional)', placeholder:'e.g. Apollo Clinic'},
+      {id:'notes', label:'Notes (optional)', placeholder:'e.g. Carry June report'},
+    ],
+  });
+  if(!res || !res.title || !res.appt_date){ if(res) toast('Title and date are needed.','error'); return; }
+  try{
+    await j('/api/parents/'+PARENT.id+'/appointments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    loadAppts(); loadMonitor();
+    toast('Added to appointments.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ INSIGHTS (Layer 4) ═══════════
+async function loadInsights(){
+  const panel=document.getElementById('insightsPanel');
+  if(!panel) return;
+  let data;
+  try{ data = await j('/api/parents/'+PARENT.id+'/insights'); }catch(e){ return; }
+  const icon={good:'✓',watch:'!',urgent:'⚠'};
+  const items = data.insights.map(i=>
+    '<div class="ins-item ins-'+i.level+'"><span class="ins-dot">'+icon[i.level]+'</span><div><div class="ins-title">'+esc(i.title)+'</div><div class="ins-detail">'+esc(i.detail)+'</div></div></div>').join('');
+  panel.innerHTML =
+    '<div class="ins-box"><div class="ins-head"><span>💡 What to notice</span>'
+    + (window.AI_ON!==false ? '<button class="ins-explain" onclick="explainInsights()">Ask AI to explain</button>' : '')
+    + '</div>'+items
+    + '<div class="ins-ai" id="insAi" style="display:none;"></div></div>';
+}
+async function explainInsights(){
+  const box=document.getElementById('insAi');
+  box.style.display='block'; box.textContent='Thinking…';
+  try{
+    const d = await j('/api/parents/'+PARENT.id+'/insights/explain',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(d.summary) box.textContent=d.summary;
+    else if(d.no_key) box.textContent='Add an Anthropic API key (.env) to get a plain-English explanation. The notes above are complete without it.';
+    else box.textContent=d.error||'AI explanation is unavailable right now.';
+  }catch(e){ box.textContent='AI explanation is unavailable right now.'; }
+}
+
+// ═══════════ MY DAY (dependent) ═══════════
+const FEELINGS=[['good','😊','I\'m good'],['okay','🙂','Just okay'],['not_well','🤒','Not well'],['need_help','🆘','I need help']];
+async function loadMyDay(){
+  document.getElementById('meName').textContent = (PARENT.name||'').split(' ')[0];
+  let today=null;
+  try{ const c = await j('/api/parents/'+PARENT.id+'/checkins'); today=c.today; }catch(e){}
+  document.getElementById('checkinBox').innerHTML =
+    today
+      ? '<div class="ci-done">✓ You told your family you\'re feeling <strong>'+esc((FEELINGS.find(f=>f[0]===today.feeling)||[])[2]||today.feeling)+'</strong> today.'
+        + (today.note?'<div class="ci-note">"'+esc(today.note)+'"</div>':'')
+        + '<button class="ci-change" onclick="showCheckinForm()">Change my answer</button></div>'
+      : checkinForm();
+  // meds
+  try{
+    const t = await j('/api/parents/'+PARENT.id+'/medications/today');
+    const labels={morning:'☀️ Morning',afternoon:'🌤️ Afternoon',night:'🌙 Night'};
+    let h='';
+    for(const slot of ['morning','afternoon','night']){
+      const items=t.schedule[slot]; if(!items||!items.length) continue;
+      h+='<div class="med-slot-head" style="margin-top:0.8rem;">'+labels[slot]+'</div>';
+      for(const m of items){
+        h+='<div class="med-item" onclick="toggleDose(\''+m.id+'\',\''+slot+'\','+(!m.taken)+');setTimeout(loadMyDay,300);" style="cursor:pointer;"><div class="med-check '+(m.taken?'on':'')+'"><svg viewBox="0 0 24 24" fill="none" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></div><div><div class="med-name '+(m.taken?'done':'')+'">'+esc(m.name)+' <span class="med-sub">'+esc(m.dosage||'')+'</span>'+(m.time?' <span class="med-time-badge">⏰ '+esc(m.time)+'</span>':'')+'</div>'+(m.notes?'<div class="med-sub">'+esc(m.notes)+'</div>':'')+'</div></div>';
+      }
+    }
+    document.getElementById('meMeds').innerHTML = h || '<div class="psub" style="font-size:13px;">No medicines listed.</div>';
+  }catch(e){}
+  // messages from family — only shown when there's something to show
+  try{
+    const msgs = await j('/api/parents/'+PARENT.id+'/messages');
+    const toMe = msgs.filter(m=>m.direction==='to_parent').slice(0,5);
+    const wrap = document.getElementById('meMsgWrap');
+    if(toMe.length){
+      wrap.style.display='block';
+      document.getElementById('meMessages').innerHTML = toMe.map(m=>
+        '<div class="feed-item" style="padding:1rem;"><div class="feed-date">'+esc(m.from_name||'Family')+' · '+fmtDate(m.created_at)+'</div><div class="feed-text">'+esc(m.body)+'</div>'+msgMedia(m)+'</div>').join('');
+      j('/api/parents/'+PARENT.id+'/messages/seen',{method:'POST'}).catch(()=>{});
+    } else {
+      wrap.style.display='none';
+    }
+  }catch(e){}
+}
+function checkinForm(){
+  return '<div class="ci-ask"><div class="ci-q">How are you feeling today?</div><div class="ci-opts">'
+    + FEELINGS.map(f=>'<button class="ci-opt" onclick="doCheckin(\''+f[0]+'\')"><span class="ci-emo">'+f[1]+'</span>'+esc(f[2])+'</button>').join('')
+    + '</div><textarea class="chat-input" id="ciNote" placeholder="Anything you want to tell them? (optional)" style="background:var(--white);min-height:56px;margin-top:0.9rem;width:100%;"></textarea></div>';
+}
+function showCheckinForm(){ document.getElementById('checkinBox').innerHTML=checkinForm(); }
+async function doCheckin(feeling){
+  const noteEl=document.getElementById('ciNote');
+  try{
+    await j('/api/parents/'+PARENT.id+'/checkins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({feeling,note:noteEl?noteEl.value.trim():''})});
+    toast(feeling==='need_help'?'Your family has been alerted right away.':'Thank you — your family can see this.','success');
+    loadMyDay();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ MESSAGES ═══════════
+async function loadMessages(){
+  const msgs = await j('/api/parents/'+PARENT.id+'/messages');
+  document.getElementById('msgList').innerHTML = msgs.map(m=>
+    '<div class="feed-item"><div class="feed-date">'+esc(m.from_name||'Family')+' · '+fmtDate(m.created_at)
+    + (m.direction==='to_parent' && m.seen ? ' · seen' : '')+'</div><div class="feed-text">'+esc(m.body)+'</div>'+msgMedia(m)+'</div>').join('')
+    || '<div class="psub">No messages yet. Send the first one.</div>';
+  const unseen = msgs.filter(m=>m.direction==='to_parent' && !m.seen).length;
+  document.getElementById('msgBadge').textContent = unseen || '';
+}
+async function sendMessage(){
+  const el=document.getElementById('msgBody'); const body=el.value.trim();
+  if(!body){ el.focus(); return; }
+  try{
+    await j('/api/parents/'+PARENT.id+'/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({body, direction: IS_DEPENDENT?'from_parent':'to_parent'})});
+    el.value=''; loadMessages(); toast('Sent.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ DOCUMENTS ═══════════
+const DOC_CATS={insurance:'🛡️ Insurance',id:'🪪 ID',hospital:'🏥 Hospital',prescription:'💊 Prescription',photo:'🖼️ Photo',other:'📄 Other'};
+let DOC_FILTER='all', DOCS=null;
+const DOC_ORDER=['report','prescription','insurance','id','hospital','photo','other'];
+async function loadDocs(){
+  try{ DOCS = await j('/api/parents/'+PARENT.id+'/documents'); }
+  catch(e){ document.getElementById('docList').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  const items=DOCS.items||[], counts=DOCS.counts||{};
+  document.getElementById('docCount').textContent = DOCS.total+' file'+(DOCS.total===1?'':'s');
+  // tabs, only for categories that actually have something
+  const cats=['all', ...DOC_ORDER.filter(c=>counts[c])];
+  if(!counts[DOC_FILTER] && DOC_FILTER!=='all') DOC_FILTER='all';
+  document.getElementById('docTabs').innerHTML = cats.map(c=>{
+    const label = c==='all' ? 'All' : (DOC_CATS[c]||c);
+    const n = c==='all' ? DOCS.total : counts[c];
+    return '<button class="dchip '+(c===DOC_FILTER?'sel':'')+'" onclick="DOC_FILTER=\''+c+'\';loadDocs()">'+esc(label)+' <span class="tab-n">'+n+'</span></button>';
+  }).join('');
+  const list = DOC_FILTER==='all' ? items : items.filter(d=>d.category===DOC_FILTER);
+  document.getElementById('docList').innerHTML = list.map(d=>
+    '<div class="doc-row"><div class="doc-ic">'+((DOC_CATS[d.category]||'📄 Other').split(' ')[0])+'</div>'
+    + '<div style="flex:1;"><div class="doc-title">'+esc(d.title)+'</div>'
+    + '<div class="doc-meta">'+esc((DOC_CATS[d.category]||'Other').split(' ').slice(1).join(' '))
+      + (d.by_name?' · '+esc(d.by_name):'') + ' · '+fmtDate(d.created_at)
+      + (d.source==='vault'?' · <span class="doc-src">from the vault</span>':'')+'</div></div>'
+    + (d.opens? '<button class="btn-out doc-btn" onclick="showDetail(\''+d.id+'\')">View</button>' : '')
+    + (d.link? '<a class="btn-out doc-btn" href="'+d.link+'" target="_blank">Open file</a>' : '')
+    + (d.can_delete? '<button class="med-del" data-req="member" onclick="delDoc(\''+d.id+'\')">Remove</button>' : '')
+    + '</div>').join('')
+    || '<div class="psub">Nothing here yet.</div>';
+  applyRoleUI();
+}
+const DOC_HINT={
+  report:"We'll read the values, flag anything outside its range, and file it in the Report Vault.",
+  prescription:"We'll read the medicines and set up their reminders for you.",
+  insurance:'Stored as-is, ready when you need it in a hurry.',
+  id:'Stored as-is.', hospital:'Stored as-is.', photo:'Stored as-is.', other:'Stored as-is.'
+};
+const EXTRACTS={report:1,prescription:1};
+function pickDocCat(btn){
+  btn.parentElement.querySelectorAll('.dchip').forEach(c=>c.classList.remove('sel'));
+  btn.classList.add('sel');
+  document.getElementById('docHint').textContent = DOC_HINT[btn.dataset.val]||'';
+  const t=document.getElementById('docTitleWrap');
+  if(t) t.style.display = EXTRACTS[btn.dataset.val] ? 'none':'block';
+}
+function docCat(){ const b=document.querySelector('#docCat .dchip.sel'); return b?b.dataset.val:'other'; }
+function openAddDoc(preset){
+  document.getElementById('docTitle').value='';
+  const want = preset || 'report';
+  document.querySelectorAll('#docCat .dchip').forEach(c=>c.classList.toggle('sel', c.dataset.val===want));
+  const selBtn = document.querySelector('#docCat .dchip.sel') || document.querySelector('#docCat .dchip');
+  selBtn.classList.add('sel'); pickDocCat(selBtn);
+  document.getElementById('docFile').value='';
+  document.getElementById('docFileLabel').innerHTML='<span>Choose a file or take a photo</span><span class="file-pick-hint">PDF or image</span>';
+  document.getElementById('docErr').innerHTML='';
+  document.getElementById('docSave').disabled=true;
+  document.getElementById('docModal').classList.add('open');
+}
+function closeDocModal(){ document.getElementById('docModal').classList.remove('open'); }
+function docFileChosen(input){
+  const f=input.files[0]; if(!f) return;
+  document.getElementById('docFileLabel').innerHTML='<span>'+esc(f.name)+'</span><span class="file-pick-hint">'+(f.size/1024).toFixed(0)+' KB · tap to change</span>';
+  document.getElementById('docSave').disabled=false;
+  const t=document.getElementById('docTitle');
+  if(!t.value) t.value=f.name.replace(/\.[^.]+$/,'');
+}
+async function saveDoc(){
+  const f=document.getElementById('docFile').files[0];
+  const cat=docCat();
+  const errBox=document.getElementById('docErr');
+  if(!f){ errBox.innerHTML='<div class="err-box">Choose a file first.</div>'; return; }
+  const btn=document.getElementById('docSave'); btn.disabled=true;
+  const fd=new FormData(); fd.append('file',f);
+  try{
+    if(cat==='prescription'){
+      btn.textContent='Reading the prescription…';
+      const r=await fetch('/api/parents/'+PARENT.id+'/prescription',{method:'POST',credentials:'same-origin',body:fd});
+      const d=await r.json().catch(()=>({error:'Could not read it'}));
+      if(!d.ok) throw new Error(d.error||'Could not read that prescription.');
+      closeDocModal(); toast('Added '+d.medicines.length+' medicine'+(d.medicines.length===1?'':'s')+' with reminders.','success');
+      nav_('meds'); return;
+    }
+    if(cat==='report'){
+      btn.textContent='Reading the report…';
+      const r=await fetch('/api/parents/'+PARENT.id+'/extract',{method:'POST',credentials:'same-origin',body:fd});
+      if(!r.ok){ const t=await r.json().catch(()=>({error:'Could not read it'})); throw new Error(t.error); }
+      const rep=await r.json();
+      closeDocModal(); toast('Report added.','success');
+      await loadReports(); nav_('vault'); setTimeout(()=>showDetail(rep.id),300); return;
+    }
+    const title=document.getElementById('docTitle').value.trim();
+    if(!title){ document.getElementById('docTitle').focus(); btn.disabled=false; btn.textContent='Save'; return; }
+    btn.textContent='Saving…';
+    fd.append('title',title); fd.append('category',cat);
+    const r=await fetch('/api/parents/'+PARENT.id+'/documents',{method:'POST',credentials:'same-origin',body:fd});
+    if(!r.ok){ const t=await r.json().catch(()=>({error:'Upload failed'})); throw new Error(t.error); }
+    closeDocModal(); toast('Document added.','success'); loadDocs();
+  }catch(e){ errBox.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
+  btn.disabled=false; btn.textContent='Save';
+}
+
+async function delDoc(id){
+  try{ await j('/api/documents/'+id,{method:'DELETE'}); loadDocs(); toast('Removed.','success'); }
+  catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ DETAILS & PROFILE ═══════════
+const LBL={
+  gender:'Gender', mobility:'Getting around', eyesight:'Eyesight', hearing:'Hearing', speech:'Speech',
+  memory:'Memory', fall_history:'Falls in the last year', lives_alone:'Lives alone',
+  smoking:'Smoking', alcohol:'Alcohol', diet:'Diet', languages:'Languages', text_size:'Text size',
+  height_cm:'Height (cm)', weight_kg:'Weight (kg)', notes:'Notes'
+};
+const VAL={
+  independent:'On their own', stick:'With a stick', walker:'With a walker', wheelchair:'Wheelchair', bedbound:'Mostly in bed',
+  good:'Good', glasses:'With glasses', poor:'Poor', blind:'Very limited', aid:'Uses a hearing aid', deaf:'Very limited',
+  clear:'Clear', slurred:'Slightly unclear', limited:'Limited', nonverbal:'Non-verbal',
+  sharp:'Sharp', forgetful:'A bit forgetful', confused:'Often confused',
+  none:'None', once:'Once', multiple:'More than once',
+  never:'Never', former:'Gave up', current:'Currently smokes', occasional:'Occasionally', regular:'Regularly',
+  vegetarian:'Vegetarian','non-vegetarian':'Non-vegetarian', jain:'Jain', vegan:'Vegan',
+  male:'Male', female:'Female', other:'Other', normal:'Normal', large:'Large', xlarge:'Extra large'
+};
+function pretty(k,v){
+  if(v===null||v===undefined||v==='') return '—';
+  if(k==='lives_alone') return v?'Yes':'No';
+  return VAL[v]||v;
+}
+async function loadDetails(){
+  document.getElementById('detName').textContent=(PARENT.name||'').split(' ')[0];
+  const p = await j('/api/parents/'+PARENT.id+'/profile');
+  PROFILE=p||{};
+  const groups=[
+    ['Basics',['gender','height_cm','weight_kg','languages']],
+    ['Daily living',['mobility','eyesight','hearing','speech','memory','fall_history','lives_alone']],
+    ['Lifestyle',['smoking','alcohol','diet']],
+    ['App',['text_size']],
+  ];
+  let html='';
+  for(const [title,keys] of groups){
+    html+='<div class="det-group"><h4>'+title+'</h4><div class="det-grid">';
+    for(const k of keys) html+='<div class="det-cell"><div class="det-k">'+esc(LBL[k]||k)+'</div><div class="det-v">'+esc(pretty(k,p[k]))+'</div></div>';
+    html+='</div></div>';
+  }
+  // medical info lives on the parent record
+  html+='<div class="det-group"><h4>Medical</h4><div class="det-grid">'
+    + '<div class="det-cell"><div class="det-k">Blood group</div><div class="det-v">'+esc(PARENT.blood_group||'—')+'</div></div>'
+    + '<div class="det-cell"><div class="det-k">Allergies</div><div class="det-v">'+esc(PARENT.allergies||'—')+'</div></div>'
+    + '<div class="det-cell"><div class="det-k">Conditions</div><div class="det-v">'+esc(PARENT.conditions||'—')+'</div></div>'
+    + '<div class="det-cell"><div class="det-k">Doctor</div><div class="det-v">'+esc(PARENT.primary_doctor||'—')+'</div></div>'
+    + '</div></div>';
+  if(p.notes) html+='<div class="det-group"><h4>Notes</h4><div class="feed-text">'+esc(p.notes)+'</div></div>';
+  document.getElementById('detBody').innerHTML=html;
+  applyRoleUI();
+}
+async function editProfile(){
+  const p=PROFILE||{};
+  const res=await formModal({
+    title:'Edit details', subtitle:'These shape the emergency card, insights and text size.', submitLabel:'Save',
+    fields:[
+      {id:'mobility',label:'Getting around',options:[{label:'On their own',value:'independent'},{label:'Stick',value:'stick'},{label:'Walker',value:'walker'},{label:'Wheelchair',value:'wheelchair'}]},
+      {id:'eyesight',label:'Eyesight',options:[{label:'Good',value:'good'},{label:'Glasses',value:'glasses'},{label:'Poor',value:'poor'}]},
+      {id:'hearing',label:'Hearing',options:[{label:'Good',value:'good'},{label:'Hearing aid',value:'aid'},{label:'Poor',value:'poor'}]},
+      {id:'smoking',label:'Smoking',options:[{label:'Never',value:'never'},{label:'Gave up',value:'former'},{label:'Currently',value:'current'}]},
+      {id:'alcohol',label:'Alcohol',options:[{label:'Never',value:'never'},{label:'Occasionally',value:'occasional'},{label:'Regularly',value:'regular'}]},
+      {id:'fall_history',label:'Falls in the last year',options:[{label:'None',value:'none'},{label:'Once',value:'once'},{label:'More than once',value:'multiple'}]},
+      {id:'text_size',label:'Text size',options:[{label:'Normal',value:'normal'},{label:'Large',value:'large'},{label:'Extra large',value:'xlarge'}]},
+      {id:'notes',label:'Notes',placeholder:'Anything else worth knowing',value:p.notes||''},
+    ],
+  });
+  if(!res) return;
+  try{
+    await j('/api/parents/'+PARENT.id+'/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    await applyProfileAdaptations();
+    loadDetails(); toast('Details updated.','success');
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ MEDICINE REMINDERS ═══════════
+const notified=new Set();
+async function askNotifyPermission(){
+  if(!('Notification' in window)) return false;
+  if(Notification.permission==='granted') return true;
+  if(Notification.permission==='denied') return false;
+  const p=await Notification.requestPermission();
+  return p==='granted';
+}
+async function checkDueMeds(){
+  if(!PARENT) return;
+  try{
+    const d = await j('/api/parents/'+PARENT.id+'/medications/due?window=30');
+    for(const m of d.due){
+      const key=m.id+':'+m.time+':'+new Date().toDateString();
+      if(notified.has(key)) continue;
+      notified.add(key);
+      const text=`${m.name}${m.dosage?' ('+m.dosage+')':''} at ${m.time}`;
+      if('Notification' in window && Notification.permission==='granted'){
+        const n=new Notification('Medicine due', { body:text+(m.notes?' — '+m.notes:''), tag:key });
+        n.onclick=()=>{ window.focus(); nav_(IS_DEPENDENT?'me':'meds'); };
+      }
+      toast('💊 Medicine due: '+text);
+    }
+    const badge=document.getElementById('medsBadge');
+    if(badge && d.due.length) badge.textContent=d.due.length+' due';
+  }catch(e){}
+}
+function startReminders(){
+  askNotifyPermission();
+  checkDueMeds();
+  setInterval(checkDueMeds, 60000); // every minute
+}
+
+// edit an existing medicine — reuses the add modal
+let EDIT_MED_ID=null;
+async function editMed(id){
+  const all = await j('/api/parents/'+PARENT.id+'/medications');
+  const m = all.find(x=>x.id===id); if(!m) return;
+  EDIT_MED_ID=id;
+  document.getElementById('medModal').classList.add('open');
+  document.querySelector('#medModal h2').textContent='Edit medicine';
+  document.querySelector('#medModal .btn-primary').textContent='Save changes';
+  document.getElementById('medName').value=m.name||'';
+  document.getElementById('medDose').value=m.dosage||'';
+  document.getElementById('medNote').value=m.notes||'';
+  document.querySelectorAll('#medSlots .dchip').forEach(c=>c.classList.toggle('sel', !!m['slot_'+c.dataset.slot]));
+  const freq=m.frequency||'daily';
+  document.querySelectorAll('#medFreq .dchip').forEach(c=>c.classList.toggle('sel', c.dataset.f===freq));
+  document.getElementById('medDays').style.display = freq==='custom' ? 'flex':'none';
+  document.querySelectorAll('#medDays .dchip').forEach(c=>c.classList.toggle('sel', (m.days_of_week||[]).includes(+c.dataset.d)));
+  document.getElementById('medTimes').innerHTML='';
+  (m.times&&m.times.length?m.times:['08:00']).forEach(t=>addTimeRow(t));
+}
+
+// ═══════════ FOOD & WELLNESS ═══════════
+let WELL = { draft:{}, canEdit:false, dirty:false };
+const HABITS=[['walked','\ud83d\udeb6','Went for a walk'],['exercise','\ud83e\uddd8','Yoga or exercise'],['meditation','\ud83d\udd49\ufe0f','Meditation / prayer'],['ate_healthy','\ud83e\udd57','Ate healthy today']];
+function fmtTime(t){ if(!t) return ''; try{ return new Date(t).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
+function tick(v){ return v===true?'\u2713':(v===false?'\u2014':'\u00b7'); }
+
+async function loadWellness(){
+  document.getElementById('wellName').textContent=(PARENT.name||'').split(' ')[0];
+  let r;
+  try{ r = await j('/api/parents/'+PARENT.id+'/wellness'); }
+  catch(e){
+    document.getElementById('wellHabits').innerHTML =
+      '<div class="err-box">The habit tracker isn\'t set up yet on this database.<br>'
+      + 'Run <code>psql -d parentfirst_vault -f db/migrations/010_wellness.sql</code> and restart, then reload.</div>';
+    document.getElementById('wellMeals').innerHTML=''; document.getElementById('wellTips').innerHTML='';
+    return;
+  }
+  const w = r.today||{};
+  WELL = { draft:{ walked:w.walked, exercise:w.exercise, meditation:w.meditation, ate_healthy:w.ate_healthy, water_glasses:w.water_glasses||0 },
+           canEdit:!!r.can_edit, dirty:false };
+  renderWellness(r);
+  renderWellnessHistory(r.history||[]);
+  loadFoodSuggestions();
+}
+
+function renderWellness(r){
+  const w = WELL.draft, edit = WELL.canEdit;
+  const saved = r.last_saved ? 'Last saved '+fmtTime(r.last_saved) : 'Not saved yet today';
+  document.getElementById('wellHabits').innerHTML =
+    '<div class="hab-head"><span>Today</span><span style="display:flex;gap:10px;align-items:center;">'
+    + (r.streak>1?'<span class="hab-streak">\ud83d\udd25 '+r.streak+'-day streak</span>':'')
+    + '<span class="hab-saved">'+esc(saved)+'</span></span></div>'
+    + (edit ? '' : '<div class="hab-readonly">You\'re viewing this. '+esc((PARENT.name||'').split(' ')[0])+' or a family member on the ground records it.</div>')
+    + '<div class="hab-grid">'
+    + HABITS.map(([k,ic,label])=>{
+        const on = w[k]===true;
+        return '<button class="hab '+(on?'on':'')+(edit?'':' hab-locked')+'"'
+          + (edit?' onclick="draftHabit(\''+k+'\')"':' disabled')
+          + '><span class="hab-ic">'+ic+'</span><span class="hab-l">'+esc(label)+'</span>'
+          + '<span class="hab-tick">'+(on?'\u2713':'')+'</span></button>';
+      }).join('')
+    + '</div>'
+    + '<div class="hab-water"><span>Glasses of water</span><div class="water-row">'
+    + [1,2,3,4,5,6,7,8].map(n=>'<button class="water '+((w.water_glasses||0)>=n?'on':'')+'"'
+        + (edit?' onclick="draftWater('+n+')"':' disabled')+'>'+n+'</button>').join('')
+    + '</div></div>'
+    + (edit ? '<div class="hab-actions"><button class="btn-primary" id="wellSave" onclick="saveWellness()"'
+        + (WELL.dirty?'':' disabled')+'>'+(WELL.dirty?'Save today\'s log':'Saved')+'</button>'
+        + (WELL.dirty?'<span class="hab-unsaved">Unsaved changes</span>':'')+'</div>' : '');
+}
+
+function draftHabit(k){ WELL.draft[k] = !(WELL.draft[k]===true); WELL.dirty=true; renderWellness({streak:0,last_saved:WELL.lastSaved}); }
+function draftWater(n){ WELL.draft.water_glasses = (WELL.draft.water_glasses===n? n-1 : n); WELL.dirty=true; renderWellness({streak:0,last_saved:WELL.lastSaved}); }
+
+async function saveWellness(){
+  const btn=document.getElementById('wellSave'); if(btn){ btn.disabled=true; btn.textContent='Saving\u2026'; }
+  try{
+    await j('/api/parents/'+PARENT.id+'/wellness',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({ walked:WELL.draft.walked===true, exercise:WELL.draft.exercise===true,
+        meditation:WELL.draft.meditation===true, ate_healthy:WELL.draft.ate_healthy===true,
+        water_glasses:WELL.draft.water_glasses||0 })});
+    toast('Today\'s log saved.','success');
+    loadWellness();
+  }catch(e){ toast(e.message,'error'); if(btn){ btn.disabled=false; btn.textContent='Save today\'s log'; } }
+}
+
+function renderWellnessHistory(hist){
+  const host=document.getElementById('wellHistory'); if(!host) return;
+  if(!hist.length){ host.innerHTML=''; return; }
+  host.innerHTML = '<h4 class="wh-title">Recent days</h4>'
+    + '<div class="wh-table"><div class="wh-row wh-head"><div>Date</div><div>Walk</div><div>Yoga</div><div>Meditation</div><div>Ate well</div><div>Water</div><div>Saved</div></div>'
+    + hist.map(h=>'<div class="wh-row"><div>'+esc(fmtDate(h.date))+'</div>'
+      + '<div class="'+(h.walked?'wh-yes':'')+'">'+tick(h.walked)+'</div>'
+      + '<div class="'+(h.exercise?'wh-yes':'')+'">'+tick(h.exercise)+'</div>'
+      + '<div class="'+(h.meditation?'wh-yes':'')+'">'+tick(h.meditation)+'</div>'
+      + '<div class="'+(h.ate_healthy?'wh-yes':'')+'">'+tick(h.ate_healthy)+'</div>'
+      + '<div>'+(h.water_glasses||'\u00b7')+'</div>'
+      + '<div class="wh-when">'+esc(fmtTime(h.updated_at))+'</div></div>').join('')
+    + '</div>';
+}
+
+async function loadFoodSuggestions(){
+  try{
+    const f = await j('/api/parents/'+PARENT.id+'/food');
+    document.getElementById('wellDiet').textContent = f.vegetarian?'Vegetarian suggestions':'Includes non-vegetarian options';
+    document.getElementById('wellMeals').innerHTML = Object.entries(f.meals).map(([meal,items])=>
+      '<div class="food-card"><h4>'+esc(meal)+'</h4><ul>'+items.map(i=>'<li>'+esc(i)+'</li>').join('')+'</ul></div>').join('');
+    document.getElementById('wellTips').innerHTML =
+      '<div class="food-tips"><h4>Worth remembering</h4><ul>'+f.tips.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div>'
+      + '<div class="food-avoid"><h4>Best kept occasional</h4><ul>'+f.avoid.map(t=>'<li>'+esc(t)+'</li>').join('')+'</ul></div>'
+      + '<div class="disclaimer">'+esc(f.note)+'</div>';
+  }catch(e){}
+}
+
+
+// ═══════════ VITALS ═══════════
+let VIT=null;
+function bandClass(v,b){ if(v==null||!b) return ''; return v<b.min||v>b.max ? 'vit-out':'vit-ok'; }
+async function loadVitals(){
+  try{ VIT = await j('/api/parents/'+PARENT.id+'/vitals?days=60'); }
+  catch(e){ document.getElementById('vitCards').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  const l=VIT.latest, B=VIT.bands;
+  document.getElementById('vitLatest').textContent = l ? ('Last recorded '+fmtDate(l.taken_on)) : 'Nothing recorded yet';
+  const addBtn=document.getElementById('vitAddBtn'); if(addBtn) addBtn.style.display = VIT.can_edit?'':'none';
+  document.getElementById('vitCards').innerHTML =
+    '<div class="vit-grid">'
+    + vitCard('Blood pressure', l&&l.systolic? l.systolic+'/'+(l.diastolic||'—') : '—', 'mmHg',
+        l&&l.systolic? bandClass(l.systolic,B.systolic):'', spark(VIT.series.bp.map(p=>p.systolic)))
+    + vitCard('Blood sugar', l&&l.sugar? l.sugar : '—', 'mg/dL',
+        l&&l.sugar? bandClass(l.sugar,B.sugar):'', spark(VIT.series.sugar.map(p=>p.value)))
+    + vitCard('Weight', l&&l.weight_kg? (+l.weight_kg).toFixed(1) : '—', 'kg', '', spark(VIT.series.weight.map(p=>p.value)))
+    + '</div>';
+  const rows = VIT.entries.slice(0,20);
+  document.getElementById('vitList').innerHTML = rows.length
+    ? '<h4 class="wh-title">Recent readings</h4><div class="wh-table">'
+      + '<div class="wh-row vit-row wh-head"><div>Date</div><div>BP</div><div>Sugar</div><div>Weight</div><div>Pulse</div><div>By</div></div>'
+      + rows.map(r=>'<div class="wh-row vit-row"><div>'+esc(fmtDate(r.taken_on))+(r.taken_time?' <span class="wh-when">'+esc(r.taken_time)+'</span>':'')+'</div>'
+        + '<div class="'+(r.systolic?bandClass(r.systolic,VIT.bands.systolic):'')+'">'+(r.systolic? r.systolic+'/'+(r.diastolic||'—') : '·')+'</div>'
+        + '<div class="'+(r.sugar?bandClass(r.sugar,VIT.bands.sugar):'')+'">'+(r.sugar||'·')+(r.sugar&&r.sugar_type?' <span class="wh-when">'+esc(r.sugar_type)+'</span>':'')+'</div>'
+        + '<div>'+(r.weight_kg? (+r.weight_kg).toFixed(1):'·')+'</div>'
+        + '<div>'+(r.pulse||'·')+'</div>'
+        + '<div class="wh-when">'+esc(r.by_name||'')+'</div></div>').join('')
+      + '</div>'
+    : '<div class="psub">No readings yet. Log the first one.</div>';
+}
+function vitCard(label,val,unit,cls,svg){
+  return '<div class="vit-card"><div class="vit-l">'+esc(label)+'</div>'
+    + '<div class="vit-v '+cls+'">'+val+' <span class="vit-u">'+esc(unit)+'</span></div>'
+    + '<div class="vit-spark">'+svg+'</div></div>';
+}
+function spark(vals){
+  vals=(vals||[]).filter(v=>typeof v==='number');
+  if(vals.length<2) return '';
+  const W=200,H=40,mn=Math.min(...vals),mx=Math.max(...vals),sp=(mx-mn)||1;
+  const pts=vals.map((v,i)=>(i*(W/(vals.length-1)))+','+(H-((v-mn)/sp)*(H-6)-3)).join(' ');
+  return '<svg viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none" style="width:100%;height:40px;"><polyline points="'+pts+'" fill="none" stroke="#C84B2F" stroke-width="2" stroke-linejoin="round"/></svg>';
+}
+async function openAddVital(){
+  const res = await formModal({
+    title:'Log a reading', subtitle:'Fill only what you measured — leave the rest blank.', submitLabel:'Save reading',
+    fields:[
+      {id:'taken_time', label:'When', options:[{label:'Morning',value:'morning'},{label:'Evening',value:'evening'}]},
+      {id:'systolic',  label:'BP — upper (systolic)',  placeholder:'e.g. 130', type:'number'},
+      {id:'diastolic', label:'BP — lower (diastolic)', placeholder:'e.g. 84',  type:'number'},
+      {id:'pulse',     label:'Pulse',                  placeholder:'e.g. 72',  type:'number'},
+      {id:'sugar',     label:'Blood sugar (mg/dL)',    placeholder:'e.g. 118', type:'number'},
+      {id:'sugar_type',label:'Sugar reading type', options:[{label:'Fasting',value:'fasting'},{label:'Post-meal',value:'post-meal'},{label:'Random',value:'random'}]},
+      {id:'weight_kg', label:'Weight (kg)',            placeholder:'e.g. 68',  type:'number'},
+      {id:'notes',     label:'Note (optional)',        placeholder:'anything worth remembering'},
+    ],
+  });
+  if(!res) return;
+  const body={}; for(const k of ['systolic','diastolic','pulse','sugar','weight_kg']) if(res[k]) body[k]=+res[k];
+  body.taken_time=res.taken_time; body.sugar_type=res.sugar_type; body.notes=res.notes;
+  if(!body.systolic && !body.sugar && !body.weight_kg && !body.pulse){ toast('Enter at least one reading.','error'); return; }
+  try{ await j('/api/parents/'+PARENT.id+'/vitals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('Reading saved.','success'); loadVitals(); loadMonitor(); }
+  catch(e){ toast(e.message,'error'); }
+}
+
+// ═══════════ MEDICAL TIMELINE ═══════════
+const TL_ICON={prescription:'\u{1f48a}',report:'\u{1f9ea}',appointment:'\u{1fa7a}',vital:'\u{1f4c8}',checkin:'\u{1f642}'};
+const TL_LABEL={prescription:'Prescription',report:'Report',appointment:'Visit',vital:'Vitals',checkin:'Check-in'};
+let TL_FILTER='all';
+async function loadTimeline(){
+  let d;
+  try{ d = await j('/api/parents/'+PARENT.id+'/timeline'); }
+  catch(e){ document.getElementById('tlList').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  const kinds=['all',...new Set(d.items.map(i=>i.kind))];
+  document.getElementById('tlFilters').innerHTML = kinds.map(k=>
+    '<button class="dchip '+(k===TL_FILTER?'sel':'')+'" onclick="TL_FILTER=\''+k+'\';loadTimeline()">'+(k==='all'?'Everything':esc(TL_LABEL[k]||k))+'</button>').join('');
+  const items = TL_FILTER==='all'? d.items : d.items.filter(i=>i.kind===TL_FILTER);
+  let html='', lastDate='';
+  for(const i of items){
+    if(i.date!==lastDate){ html += '<div class="tl-date-head">'+esc(fmtDate(i.date))+'</div>'; lastDate=i.date; }
+    html += '<div class="tl-item tl-'+esc(i.kind)+'"><span class="tl-ic">'+(TL_ICON[i.kind]||'\u2022')+'</span>'
+      + '<div class="tl-body"><div class="tl-t">'+esc(i.title)+' <span class="tl-kind">'+esc(TL_LABEL[i.kind]||i.kind)+'</span></div>'
+      + (i.detail?'<div class="tl-d">'+esc(i.detail)+'</div>':'')+'</div>'
+      + (i.link?'<a class="btn-out tl-open" href="'+i.link+'" target="_blank">Open</a>':'')+'</div>';
+  }
+  document.getElementById('tlList').innerHTML = html || '<div class="psub">Nothing recorded yet.</div>';
+}
+
+
+// ═══════════ ALERT RESPONSE ═══════════
+let KIT=null;
+async function loadAlertZone(){
+  const zone=document.getElementById('alertZone'); if(!zone) return;
+  let alerts=[];
+  try{ alerts = await j('/api/parents/'+PARENT.id+'/alerts'); }catch(e){ return; }
+  const open = alerts.filter(a=>a.status==='open');
+  if(!open.length){ zone.innerHTML=''; return; }
+  if(!KIT){ try{ KIT = await j('/api/parents/'+PARENT.id+'/response-kit'); }catch(e){ KIT={calls:[],steps:[],essentials:{}}; } }
+  zone.innerHTML = open.map(a=>alertCard(a)).join('');
+}
+function alertCard(a){
+  const sos = a.severity==='sos';
+  const kind = sos ? 'sos' : 'alert';
+  const ack = a.acknowledged_by
+    ? '<div class="al-ack">✓ <strong>'+esc(a.ack_name||'Someone')+'</strong> is on it — since '+fmtTime(a.acknowledged_at)+'</div>'
+    : '<button class="al-btn al-ack-btn" onclick="ackAlert(\''+a.id+'\')">I\'m on it</button>';
+  const calls = (KIT.calls||[]).map(c=>
+    '<a class="al-call al-'+esc(c.kind)+'" href="tel:'+esc(String(c.phone).replace(/\s/g,''))+'">'
+    + '<span class="al-call-l">'+esc(c.label)+'</span><span class="al-call-s">'+esc(c.sub)+' · '+esc(c.phone)+'</span></a>').join('');
+  const e = KIT.essentials||{};
+  const facts = [
+    e.blood_group? 'Blood group '+esc(e.blood_group):'',
+    e.conditions? esc(e.conditions):'',
+    e.allergies? 'Allergic to '+esc(e.allergies):'',
+    (e.medications&&e.medications.length)? 'On '+e.medications.length+' medicines':''
+  ].filter(Boolean).join(' · ');
+  return '<div class="al-card al-lvl-'+kind+'">'
+    + '<div class="al-top"><span class="al-badge">'+(sos?'SOS':'ALERT')+'</span>'
+    + '<div class="al-msg"><strong>'+esc(a.by_name||'Someone')+':</strong> '+esc(a.message)+'</div>'
+    + '<span class="al-when">'+fmtTime(a.created_at)+'</span></div>'
+    + '<div class="al-steps"><div class="al-steps-h">What to do</div><ol>'
+      + (KIT.steps||[]).map(t=>'<li>'+esc(t)+'</li>').join('')+'</ol></div>'
+    + '<div class="al-calls">'+calls+'</div>'
+    + (facts?'<div class="al-facts">'+facts+'</div>':'')
+    + '<div class="al-actions">'+ack
+    + '<button class="al-btn al-resolve" onclick="resolveAlert(\''+a.id+'\')">Mark resolved</button></div>'
+    + '</div>';
+}
+async function ackAlert(id){
+  try{
+    const r = await j('/api/parents/'+PARENT.id+'/alerts/'+id+'/ack',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    if(r.already) toast((r.alert&&r.alert.ack_name? r.alert.ack_name:'Someone')+' is already responding.');
+    else toast('The family can see you\'re on it.','success');
+    loadAlertZone();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function resolveAlert(id){
+  const res = await formModal({
+    title:'Mark resolved', subtitle:'A line about what happened helps the rest of the family.', submitLabel:'Resolve',
+    fields:[{id:'resolution', label:'What happened?', placeholder:'e.g. Spoke to him, he had felt dizzy — resting now, doctor called'}],
+  });
+  if(!res) return;
+  try{
+    await j('/api/parents/'+PARENT.id+'/alerts/'+id+'/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({resolution:res.resolution})});
+    toast('Marked resolved.','success'); loadAlertZone(); loadMonitor();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+
+// ═══════════ VOICE NOTES & PHOTOS ═══════════
+let REC=null, recChunks=[], recStart=0, recTick=null, recBlob=null;
+async function toggleRecord(){
+  const btn=document.getElementById('recBtn');
+  if(REC && REC.state==='recording'){ REC.stop(); return; }
+  if(!navigator.mediaDevices || !window.MediaRecorder){ toast('This browser can\'t record audio.','error'); return; }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    recChunks=[]; recBlob=null;
+    REC = new MediaRecorder(stream);
+    REC.ondataavailable = e=>{ if(e.data.size) recChunks.push(e.data); };
+    REC.onstop = ()=>{
+      clearInterval(recTick);
+      stream.getTracks().forEach(t=>t.stop());
+      const secs = Math.round((Date.now()-recStart)/1000);
+      recBlob = new Blob(recChunks, {type: REC.mimeType || 'audio/webm'});
+      recBlob._secs = secs;
+      btn.textContent='🎙️ Record a voice note'; btn.classList.remove('rec-on');
+      document.getElementById('recTimer').textContent='';
+      const url=URL.createObjectURL(recBlob);
+      document.getElementById('recPreview').innerHTML =
+        '<div class="rec-prev"><audio controls src="'+url+'"></audio>'
+        + '<button class="btn-primary rec-send" onclick="sendVoice()">Send voice note</button>'
+        + '<button class="msg-tool" onclick="discardVoice()">Discard</button></div>';
+    };
+    REC.start(); recStart=Date.now();
+    btn.textContent='⏹ Stop recording'; btn.classList.add('rec-on');
+    recTick=setInterval(()=>{
+      const s=Math.round((Date.now()-recStart)/1000);
+      document.getElementById('recTimer').textContent=Math.floor(s/60)+':'+String(s%60).padStart(2,'0');
+    },500);
+  }catch(e){ toast('Microphone permission is needed to record.','error'); }
+}
+function discardVoice(){ recBlob=null; document.getElementById('recPreview').innerHTML=''; }
+async function sendVoice(){
+  if(!recBlob) return;
+  const fd=new FormData();
+  const ext = (recBlob.type.includes('mp4')?'m4a':'webm');
+  fd.append('file', recBlob, 'voice.'+ext);
+  fd.append('secs', recBlob._secs||0);
+  fd.append('body', document.getElementById('msgBody').value.trim());
+  fd.append('direction', IS_DEPENDENT?'from_parent':'to_parent');
+  try{
+    const r=await fetch('/api/parents/'+PARENT.id+'/messages/voice',{method:'POST',credentials:'same-origin',body:fd});
+    if(!r.ok) throw new Error('Could not send');
+    discardVoice(); document.getElementById('msgBody').value='';
+    toast('Voice note sent.','success'); loadMessages();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function sendPhoto(input){
+  const f=input.files[0]; if(!f) return;
+  const fd=new FormData();
+  fd.append('file', f);
+  fd.append('body', document.getElementById('msgBody').value.trim());
+  fd.append('direction', IS_DEPENDENT?'from_parent':'to_parent');
+  try{
+    const r=await fetch('/api/parents/'+PARENT.id+'/messages/voice',{method:'POST',credentials:'same-origin',body:fd});
+    if(!r.ok) throw new Error('Could not send');
+    input.value=''; document.getElementById('msgBody').value='';
+    toast('Photo sent.','success'); loadMessages();
+  }catch(e){ toast(e.message,'error'); }
+}
+function msgMedia(m){
+  if(!m.has_media) return '';
+  if(m.media_kind==='image') return '<img class="msg-img" src="/api/messages/'+m.id+'/media" alt="">';
+  return '<audio class="msg-audio" controls src="/api/messages/'+m.id+'/media"></audio>'
+    + (m.media_secs? '<span class="msg-secs">'+Math.floor(m.media_secs/60)+':'+String(m.media_secs%60).padStart(2,'0')+'</span>':'');
+}
+
+init();
+</script>
+</body>
+</html>
