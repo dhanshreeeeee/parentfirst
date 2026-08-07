@@ -573,6 +573,7 @@
       <div class="logo-mark"><svg viewBox="0 0 24 24"><path d="M12 21.7C5.8 17.5 2 13.4 2 9.5 2 6.4 4.4 4 7.5 4c1.8 0 3.5.9 4.5 2.3C13 4.9 14.7 4 16.5 4 19.6 4 22 6.4 22 9.5c0 3.9-3.8 8-10 12.2z"/></svg></div>
       <span class="logo-name">Parent<span>First</span></span>
     </div>
+    <div id="inviteBanner"></div>
     <h2 id="authTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;text-align:center;margin-bottom:0.3rem;">Welcome back</h2>
     <p class="msub" style="text-align:center;" id="authSub">Sign in to your family's care space.</p>
     <div id="authNameWrap" style="display:none;">
@@ -1154,6 +1155,11 @@ function renderInviteBanner(){
   const b=document.getElementById('inviteBanner'); if(!b) return;
   const code=sessionStorage.getItem('pf_join_code');
   if(!code){ b.innerHTML=''; return; }
+  // someone arriving by invite is almost always new — show them signup
+  if(typeof AUTH_MODE!=='undefined' && AUTH_MODE!=='signup' && !window._inviteModeSet){
+    window._inviteModeSet = true;
+    try{ toggleAuthMode(); }catch(e){}
+  }
   const h=window._pfInviteFrom;
   b.innerHTML='<div class="inv-banner">&#128075; You\'ve been invited to join <b>'+esc(h?h.name:'a family group')+'</b>'
     + (h?' ('+h.member_count+' member'+(h.member_count===1?'':'s')+')':'')
@@ -1386,11 +1392,15 @@ async function init(){
   if(!code) return;
   sessionStorage.setItem('pf_join_code', code.toUpperCase());
   history.replaceState({}, '', location.pathname);   // keep the code out of the URL bar
+  try{
   fetch('/api/households/peek/'+encodeURIComponent(code.toUpperCase()))
     .then(r=>r.ok?r.json():null)
     .then(h=>{ if(h){ window._pfInviteFrom = h; if(typeof renderInviteBanner==='function') renderInviteBanner(); } })
     .catch(()=>{});
+  }catch(e){}
 })();
+// make sure the invite greeting appears even if the group lookup is slow or fails
+document.addEventListener('DOMContentLoaded', ()=>{ try{ renderInviteBanner(); }catch(e){} });
 async function boot(){
   ME = await j('/api/me');
   hideAuth();
@@ -2950,7 +2960,7 @@ async function joinWithCode(code){
 }
 function inviteLink(code){ return location.origin+'/?join='+encodeURIComponent(code); }
 function inviteText(famName, code){
-  return 'Join our family on ParentFirst \u2764\ufe0f\n\n'+famName+'\n'+inviteLink(code)+'\n\nOpen the link, sign up, and you\'re in.';
+  return 'Join our family on ParentFirst\n\n'+famName+'\n'+inviteLink(code)+'\n\nOpen the link, sign up, and you\'re in.';
 }
 async function showInvite(famName, code){
   const link = inviteLink(code);
