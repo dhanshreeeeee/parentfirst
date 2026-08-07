@@ -184,6 +184,10 @@
   .fam-swap{ font-size:12px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink-muted); white-space:nowrap; }
   .fam-swap:hover{ border-color:var(--rust); color:var(--rust); }
   .fam-managed{ font-size:10px; background:var(--gold-light); color:#7a5a08; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
+  .fam-add{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.3rem; margin-bottom:1.25rem; }
+  .fam-add h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.4rem; }
+  .fam-add-p{ font-size:13px; color:var(--ink-muted); margin-bottom:0.9rem; }
+  .onb-note{ font-size:12.5px; color:var(--ink-muted); background:var(--cream); border-radius:10px; padding:10px 13px; margin-top:0.8rem; line-height:1.55; }
   .fam-invite{ background:var(--ink); color:#fff; border-radius:var(--r-lg); padding:1.3rem 1.5rem; }
   .fam-inv-l{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:rgba(255,255,255,0.5); }
   .fam-code{ font-family:var(--font-display); font-size:30px; letter-spacing:3px; margin:0.3rem 0; }
@@ -578,6 +582,11 @@
     <h2 id="authTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;text-align:center;margin-bottom:0.3rem;">Welcome back</h2>
     <p class="msub" style="text-align:center;" id="authSub">Sign in to your family's care space.</p>
     <div id="authNameWrap" style="display:none;">
+      <label class="dl-label">I'm signing up as…</label>
+      <div class="chip-row" id="authRole" style="margin-bottom:0.9rem;">
+        <button type="button" class="dchip sel" data-val="carer" onclick="fmPick(this)">Looking after my parents</button>
+        <button type="button" class="dchip" data-val="parent" onclick="fmPick(this)">I'm the parent</button>
+      </div>
       <label class="dl-label">Your name</label>
       <input class="chat-input" id="authName" placeholder="Dhanshree" style="background:var(--white);width:100%;">
     </div>
@@ -639,7 +648,7 @@
     <!-- PARENT MONITOR -->
     <div class="view active" id="view-monitor">
       <div class="page-eyebrow">Parent Monitor</div>
-      <h1 class="pt">How is Papa, <em>right now?</em></h1>
+      <h1 class="pt" id="monTitle">How is <em>everyone?</em></h1>
       <p class="psub">Everything at a glance — today's mood, medicines, vitals, and care team. Your morning-chai check-in.</p>
       <div id="monitorBody"></div>
     </div>
@@ -873,7 +882,7 @@
     <!-- DAILY CARE & FAMILY -->
     <div class="view" id="view-daily">
       <div class="page-eyebrow">Daily Care &amp; Family</div>
-      <h1 class="pt">How is Papa <em>today?</em></h1>
+      <h1 class="pt" id="dailyTitle">How is <em>today</em> going?</h1>
       <p class="psub">The caregiver logs the day in seconds. Everyone in the family sees a warm update — without having to ask.</p>
       <div style="display:grid;grid-template-columns:1fr 1.3fr;gap:1.5rem;align-items:start;">
         <div class="card" style="padding:1.5rem;">
@@ -1183,6 +1192,8 @@ async function submitAuth(){
   errBox.innerHTML='';
   if(!email||!password){ errBox.innerHTML='<div class="err-box">Email and password are required.</div>'; return; }
   const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
+  const roleBtn = document.querySelector('#authRole .dchip.sel');
+  if(AUTH_MODE==='signup') window._signupRole = roleBtn ? roleBtn.dataset.val : 'carer';
   const body = AUTH_MODE==='signup' ? {email,password,name} : {email,password};
   try{
     const r = await fetch(API+path, {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -1260,6 +1271,12 @@ async function switchParent(id){
 }
 function paintParent(){
   if(!PARENT) return;
+  const first = (PARENT.name||'').split(' ')[0];
+  const mine = ME && ME.user && PARENT.name === ME.user.name;
+  const mt = document.getElementById('monTitle');
+  if(mt) mt.innerHTML = mine ? 'How are <em>you</em> doing?' : 'How is '+esc(first)+', <em>right now?</em>';
+  const dt = document.getElementById('dailyTitle');
+  if(dt) dt.innerHTML = mine ? 'How is <em>your day</em> going?' : 'How is '+esc(first)+' <em>today?</em>';
   document.getElementById('ppName').textContent = PARENT.name + (PARENT.age? ', '+PARENT.age : '');
   document.getElementById('ppAv').textContent = PARENT.name[0];
   document.getElementById('userAv').textContent = ME.user.name[0];
@@ -1278,6 +1295,27 @@ function applyRoleUI(){
 
 // add parent (admin action) — styled modal
 function goFamily(){ nav_('family'); closeMenus(''); }
+async function addByEmail(){
+  if(!HOUSE){ toast('Create your family group first.','error'); return; }
+  const res = await formModal({
+    title:'Add someone to the group',
+    subtitle:'Ask them to sign up first, then enter the email address they used.',
+    submitLabel:'Add to group',
+    fields:[
+      {id:'email', label:'Their email', placeholder:'e.g. papa@gmail.com'},
+      {id:'care_role', label:'They are…', options:[
+        {label:'Being cared for (a parent)', value:'elder'},
+        {label:'Helping look after them', value:'carer'}]},
+    ],
+  });
+  if(!res || !res.email) return;
+  try{
+    const r = await j('/api/households/'+HOUSE.id+'/add-member',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:res.email.trim(), care_role:res.care_role})});
+    toast(r.name+' added to the group.','success');
+    ME = await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
+}
 async function addManagedMember(){
   if(!HOUSE){ toast('Create or join a family group first.','error'); return; }
   const res = await formModal({
@@ -1423,22 +1461,28 @@ async function boot(){
 
 // ═══════════ ONBOARDING WIZARD ═══════════
 let ONB = { step:0, type:'owner', data:{}, profile:{} };
-const ONB_STEPS = [
-  { title:'Tell us about you', sub:'A few basics to set up your own health vault.', fields:'basics' },
+// Two paths, because a carer and a parent need different things.
+const STEPS_CARER = [
+  { title:'Tell us about you', sub:'Just the basics — you can add health details later.', fields:'basics' },
+  { title:'Name your family', sub:'You\'ll be the admin. Add everyone else by their email once they sign up.', fields:'group' },
+];
+const STEPS_PARENT = [
+  { title:'Tell us about you', sub:'A few basics to set up your health vault.', fields:'basics' },
   { title:'Daily living', sub:'This helps us tailor the app and suggest the right support.', fields:'function' },
   { title:'Health & lifestyle', sub:'This powers the emergency card and insights.', fields:'health' },
-  { title:'Your family', sub:'ParentFirst works as a family group — those being cared for and those looking after them.', fields:'family' },
 ];
+function onbSteps(){ return ONB.role==='parent' ? STEPS_PARENT : STEPS_CARER; }
 function startOnboarding(){
-  ONB = { step:0, data:{}, profile:{} };
+  const role = window._signupRole || (ME && ME.is_dependent ? 'parent' : 'carer');
+  ONB = { step:0, role, data:{}, profile:{} };
   document.getElementById('onbOverlay').classList.add('open');
   renderOnb();
 }
 function pickFam(v){ ONB.fam=v; renderOnb(); }
 function renderOnb(){
-  const s = ONB_STEPS[ONB.step];
-  document.getElementById('onbStepLabel').textContent = `Step ${ONB.step+1} of ${ONB_STEPS.length}`;
-  document.getElementById('onbBar').style.width = ((ONB.step+1)/ONB_STEPS.length*100)+'%';
+  const s = onbSteps()[ONB.step];
+  document.getElementById('onbStepLabel').textContent = `Step ${ONB.step+1} of ${onbSteps().length}`;
+  document.getElementById('onbBar').style.width = ((ONB.step+1)/onbSteps().length*100)+'%';
   // intake is always about the person signing up — one human, one record.
   // Records for someone who won't use the app are created from Family Group.
   document.getElementById('onbTitle').textContent = ONB.step===0 ? 'Tell us about you' : s.title;
@@ -1446,25 +1490,17 @@ function renderOnb(){
   document.getElementById('onbErr').innerHTML='';
   document.getElementById('onbBack').style.display = ONB.step>0 ? 'block':'none';
   document.getElementById('onbBack').textContent = 'Back';
-  document.getElementById('onbNext').textContent = ONB.step===ONB_STEPS.length-1 ? 'Finish' : 'Continue';
+  document.getElementById('onbNext').textContent = ONB.step===onbSteps().length-1 ? 'Finish' : 'Continue';
   let h='';
   if(s.fields==='basics'){
     h += onbInput('name','Your full name','e.g. Sunita Khandelwal', ONB.data.name||'');
     h += onbInput('age','Your age','e.g. 62',ONB.data.age||'','number');
-    h += onbInput('city','City','e.g. Bengaluru',ONB.data.city||'');
+    h += onbInput('city','Where you live','e.g. Bengaluru',ONB.data.city||'');
+    h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
-  } else if(s.fields==='family'){
-    h += '<div class="fam-choice'+(ONB.fam==='create'?' sel':'')+'" onclick="pickFam(\'create\')">'
-      +  '<div class="fam-ch-ic">\u{1F3E0}</div><div><div class="fam-ch-t">Set up my family</div>'
-      +  '<div class="fam-ch-d">Start the group and invite everyone with a link</div></div></div>'
-      +  '<div class="fam-choice'+(ONB.fam==='join'?' sel':'')+'" onclick="pickFam(\'join\')">'
-      +  '<div class="fam-ch-ic">\u{1F517}</div><div><div class="fam-ch-t">I have an invite</div>'
-      +  '<div class="fam-ch-d">Someone in the family sent you a link or code</div></div></div>'
-      +  '<div class="fam-choice'+(ONB.fam==='skip'?' sel':'')+'" onclick="pickFam(\'skip\')">'
-      +  '<div class="fam-ch-ic">\u{1F551}</div><div><div class="fam-ch-t">I\'ll do this later</div>'
-      +  '<div class="fam-ch-d">You can set this up any time from Family Group</div></div></div>'
-      +  (ONB.fam==='join' ? onbInput('invite_code','Invite code','e.g. C25CF09D', ONB.data.invite_code||'') : '')
-      +  (ONB.fam==='create' ? onbInput('group_name','Group name','e.g. Khandelwal Family', ONB.data.group_name||'') : '');
+  } else if(s.fields==='group'){
+    h += onbInput('group_name','Family group name','e.g. Khandelwal Family', ONB.data.group_name||'')
+      +  '<p class="onb-note">Once your parents and siblings sign up, add them from <b>Family Group</b> using their email address.</p>';
   } else if(s.fields==='function'){
     h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
     h += onbChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']],ONB.profile.eyesight);
@@ -1492,7 +1528,7 @@ function onbChips(id,label,opts,sel){
 function collectOnb(){
   document.querySelectorAll('#onbBody .onb-f').forEach(el=>{
     const k=el.dataset.k, v=el.value.trim();
-    if(['name','age','relation','city','invite_code','group_name'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
+    if(['name','age','relation','city','invite_code','group_name','phone'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
   });
   document.querySelectorAll('#onbBody .onb-c').forEach(el=>{
     const k=el.dataset.k, sel=el.querySelector('.dchip.sel');
@@ -1505,27 +1541,24 @@ function onbPrev(){ collectOnb(); ONB.step--; renderOnb(); }
 async function onbNextStep(){
   collectOnb();
   if(ONB.step===0 && !ONB.data.name){ document.getElementById('onbErr').innerHTML='<div class="err-box">Please enter a name.</div>'; return; }
-  if(ONB.step < ONB_STEPS.length-1){ ONB.step++; renderOnb(); return; }
+  if(ONB.step < onbSteps().length-1){ ONB.step++; renderOnb(); return; }
   // finish
   const btn=document.getElementById('onbNext'); btn.disabled=true; btn.textContent='Setting up…';
   try{
     await j('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
-      city:ONB.data.city||null, profile:ONB.profile })});
+      city:ONB.data.city||null, phone:ONB.data.phone||null,
+      account_type:ONB.role, profile:ONB.profile })});
 
-    // family choice, made on the last step of this same wizard
-    const pending = sessionStorage.getItem('pf_join_code');
+    // a carer becomes admin of the group they just named
     try{
-      if(pending){
-        await joinWithCode(pending); sessionStorage.removeItem('pf_join_code');
-      } else if(ONB.fam==='create' && ONB.data.group_name){
-        const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
+      if(ONB.role!=='parent' && ONB.data.group_name){
+        await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({name:ONB.data.group_name, care_role:'carer'})});
-        closeOnb();
-        await showInvite(h.name, h.invite_code);
-      } else if(ONB.fam==='join' && ONB.data.invite_code){
-        await joinWithCode(ONB.data.invite_code);
       }
+      // if they arrived by invite link, join that group instead
+      const pending = sessionStorage.getItem('pf_join_code');
+      if(pending){ await joinWithCode(pending); sessionStorage.removeItem('pf_join_code'); }
     }catch(e){ toast(e.message,'error'); }
 
     closeOnb();
@@ -2879,7 +2912,12 @@ async function loadFamily(){
     + (elders.length? elders.map(card).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — mark a member as cared for.</div>')
     + '</div>'
     + '<div class="fam-sec"><h4>Looking after them <span class="fam-n">'+carers.length+'</span></h4>'+carers.map(card).join('')+'</div>'
-    + '<div style="margin:0 0 1.5rem;"><button class="btn-out" onclick="addManagedMember()">+ Add someone who doesn\'t use apps</button></div>'
+    + (d.me.is_owner
+        ? '<div class="fam-add"><h4>Add someone to this group</h4>'
+          + '<p class="fam-add-p">They sign up first, then you add them here with the email they used.</p>'
+          + '<div class="inv-row"><button class="btn-primary" onclick="addByEmail()">+ Add by email</button>'
+          + '<button class="btn-out" onclick="addManagedMember()">Add someone who doesn\'t use apps</button></div></div>'
+        : '')
     + (d.invite_code
         ? '<div class="fam-invite"><div class="fam-inv-l">Invite your family</div>'
           + '<div class="inv-row" style="margin-top:0.6rem;">'

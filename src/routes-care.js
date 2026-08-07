@@ -657,7 +657,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     // Everyone who signs up gets exactly ONE record: their own. Whether their
     // vault is shared is decided by their care_role in the household — never by
     // creating extra records. This is what prevents the same human existing twice.
-    const { name, age, city, profile } = req.body || {};
+    const { name, age, city, gender, phone, account_type, group_name, profile } = req.body || {};
     const personName = name || req.user.name;
     const client = await pool.connect();
     try {
@@ -683,7 +683,10 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
         `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'dependent')
          ON CONFLICT (user_id, parent_id) DO UPDATE SET role='dependent'`,
         [req.user.id, parent.id]);
-      if (profile && typeof profile === 'object') await upsertProfile(client, parent.id, profile);
+      const prof = { ...(profile || {}) };
+      if (gender) prof.gender = gender;
+      if (phone) prof.phone = phone;
+      if (Object.keys(prof).length) await upsertProfile(client, parent.id, prof);
       if (profile?.allergies || profile?.conditions || profile?.blood_group) {
         await client.query(
           `UPDATE parents SET allergies=COALESCE($2,allergies), conditions=COALESCE($3,conditions),
@@ -692,7 +695,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       }
       await client.query('UPDATE users SET onboarded=true WHERE id=$1', [req.user.id]);
       await client.query('COMMIT');
-      return { parent };
+      return { parent, account_type: account_type || 'carer', group_name: group_name || null };
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;
@@ -701,7 +704,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
 
   const PROFILE_COLS = ['gender', 'height_cm', 'weight_kg', 'smoking', 'alcohol', 'mobility',
     'eyesight', 'hearing', 'speech', 'memory', 'lives_alone', 'fall_history', 'diet',
-    'languages', 'notes', 'text_size'];
+    'languages', 'notes', 'text_size', 'phone'];
 
   async function upsertProfile(client, parentId, p) {
     const cols = PROFILE_COLS.filter((c) => p[c] !== undefined && p[c] !== null && p[c] !== '');

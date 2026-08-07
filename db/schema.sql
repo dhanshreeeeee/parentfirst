@@ -610,3 +610,4 @@ CREATE INDEX IF NOT EXISTS idx_hm_user ON household_members(user_id);
 -- a person record can belong to a household
 ALTER TABLE parents ADD COLUMN IF NOT EXISTS household_id UUID REFERENCES households(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_parents_household ON parents(household_id);
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS phone TEXT;

@@ -225,6 +225,32 @@ export default async function householdRoutes(app, { pool }) {
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   });
 
+  // ── add a member by email (the admin's way of building the group) ──
+  // They sign up first, then the admin adds them and marks them parent or child.
+  app.post('/api/households/:id/add-member', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me || !me.is_owner) return reply.code(403).send({ error: 'only the group admin can add people' });
+    const { email, care_role } = req.body || {};
+    if (!email) return reply.code(400).send({ error: 'email required' });
+    const { rows: u } = await pool.query('SELECT id, name FROM users WHERE email=$1', [String(email).trim().toLowerCase()]);
+    if (!u[0]) {
+      return reply.code(404).send({ error: 'No account with that email yet. Ask them to sign up first, then add them.' });
+    }
+    const { rows: already } = await pool.query(
+      'SELECT 1 FROM household_members WHERE household_id=$1 AND user_id=$2', [req.params.id, u[0].id]);
+    if (already[0]) return reply.code(400).send({ error: u[0].name + ' is already in this group.' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(
+        'INSERT INTO household_members (household_id, user_id, care_role) VALUES ($1,$2,$3)',
+        [req.params.id, u[0].id, care_role === 'elder' ? 'elder' : 'carer']);
+      await syncHousehold(client, req.params.id);
+      await client.query('COMMIT');
+      return { added: true, name: u[0].name };
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
   // ── add someone who doesn't use apps (managed member) ─────────
   app.post('/api/households/:id/managed', async (req, reply) => {
     const me = await myMembership(req.user.id, req.params.id);
