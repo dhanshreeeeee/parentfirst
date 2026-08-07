@@ -75,6 +75,11 @@ await app.register(rateLimit, {
   global: false,
   max: 300,
   timeWindow: '1 minute',
+  errorResponseBuilder: (req, ctx) => ({
+    statusCode: 429,
+    error: 'Too Many Requests',
+    message: `Too many attempts. Please wait ${Math.ceil(ctx.ttl / 1000)} seconds and try again.`,
+  }),
 });
 
 // In production, only our own origin may call the API with credentials.

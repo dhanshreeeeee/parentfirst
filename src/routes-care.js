@@ -853,7 +853,10 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
   // ═══════════════════ FOOD & WELLNESS ═══════════════════
   // who may log wellness: the elder themselves and family who are actually there.
   // Admins (often remote) get a read-only view.
-  const canLogWellness = (role) => role === 'dependent' || role === 'member';
+  // Anyone who is actually present can log it: the person themselves (dependent,
+  // or admin on their own vault), family on the ground, and the caregiver.
+  // Everyone with access can log — the point is capturing the day, not gatekeeping.
+  const canLogWellness = (role) => !!role;
 
   app.get('/api/parents/:parentId/wellness', async (req) => {
     const today = localDate();

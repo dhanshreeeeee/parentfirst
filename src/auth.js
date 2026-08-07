@@ -109,7 +109,7 @@ async function authPluginImpl(app, { pool }) {
 
   // ── signup: creates a user (owner or dependent) ──
   app.post('/api/auth/signup', {
-    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
     const { email, name, password, account_type } = req.body || {};
     if (!email || !name || !password) return reply.code(400).send({ error: 'email, name, password required' });
@@ -126,7 +126,7 @@ async function authPluginImpl(app, { pool }) {
 
   // ── login ──
   app.post('/api/auth/login', {
-    config: { rateLimit: { max: 8, timeWindow: '5 minutes' } },
+    config: { rateLimit: { max: 40, timeWindow: '5 minutes' } },
   }, async (req, reply) => {
     const { email, password } = req.body || {};
     if (!email || !password) return reply.code(400).send({ error: 'email and password required' });

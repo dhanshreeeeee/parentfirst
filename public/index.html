@@ -159,6 +159,7 @@
   .doc-btn{ padding:7px 13px !important; font-size:12.5px !important; text-decoration:none; white-space:nowrap; }
   .fam-choice{ display:flex; gap:15px; align-items:center; background:var(--white); border:2px solid var(--border); border-radius:16px; padding:1.15rem 1.25rem; margin-bottom:0.8rem; cursor:pointer; transition:all .15s; text-align:left; }
   .fam-choice:hover{ border-color:var(--rust); transform:translateY(-1px); }
+  .fam-choice.sel{ border-color:var(--rust); background:var(--rust-light); }
   .fam-ch-ic{ font-size:28px; }
   .fam-ch-t{ font-size:16px; font-weight:600; }
   .fam-ch-d{ font-size:13px; color:var(--ink-muted); margin-top:2px; }
@@ -579,10 +580,6 @@
     <div id="authNameWrap" style="display:none;">
       <label class="dl-label">Your name</label>
       <input class="chat-input" id="authName" placeholder="Dhanshree" style="background:var(--white);width:100%;">
-      <label class="dl-label">I am…</label>
-      <div class="chip-row" id="authType">
-        <!-- one signup for everyone: your role in the family is chosen in the group step -->
-      </div>
     </div>
     <label class="dl-label">Email</label>
     <input class="chat-input" id="authEmail" type="email" placeholder="you@email.com" style="background:var(--white);width:100%;">
@@ -814,7 +811,6 @@
       </div>
       <div class="chip-row" id="docTabs" style="margin-bottom:1.25rem;"></div>
       <div id="docList"></div>
-      <input type="file" id="docInput" style="display:none" onchange="uploadDoc(this.files[0])">
     </div>
 
     <!-- DETAILS & PROFILE -->
@@ -1187,15 +1183,12 @@ async function submitAuth(){
   errBox.innerHTML='';
   if(!email||!password){ errBox.innerHTML='<div class="err-box">Email and password are required.</div>'; return; }
   const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
-  const typeBtn = document.querySelector('#authType .dchip.sel');
-  const acctType = typeBtn ? typeBtn.dataset.val : 'owner';
   const body = AUTH_MODE==='signup' ? {email,password,name} : {email,password};
   try{
     const r = await fetch(API+path, {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){ const t=await r.json().catch(()=>({error:'Something went wrong'})); throw new Error(t.error); }
     hideAuth();
     document.getElementById('authPassword').value='';
-    window._acctType = AUTH_MODE==='signup' ? acctType : null;
     await boot();
   }catch(e){ errBox.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
 }
@@ -1404,12 +1397,13 @@ document.addEventListener('DOMContentLoaded', ()=>{ try{ renderInviteBanner(); }
 async function boot(){
   ME = await j('/api/me');
   hideAuth();
+  const app = document.querySelector('.app') || document.body;
   // brand-new user → intake form
   if(!ME.user.onboarded || !ME.parents.length){
-    startOnboarding(window._acctType || (ME.is_dependent?'dependent':'owner'));
+    startOnboarding();
     return;
   }
-  document.getElementById('onbOverlay').classList.remove('open');
+  closeOnb();
   // caregiver-only users get the simple surface
   if(ME.parents.length && ME.parents.every(p=>p.role==='caregiver')){
     window.location.href='/caregiver';
@@ -1432,13 +1426,15 @@ let ONB = { step:0, type:'owner', data:{}, profile:{} };
 const ONB_STEPS = [
   { title:'Tell us about you', sub:'A few basics to set up your own health vault.', fields:'basics' },
   { title:'Daily living', sub:'This helps us tailor the app and suggest the right support.', fields:'function' },
-  { title:'Health & lifestyle', sub:'Last step — this powers the emergency card and insights.', fields:'health' },
+  { title:'Health & lifestyle', sub:'This powers the emergency card and insights.', fields:'health' },
+  { title:'Your family', sub:'ParentFirst works as a family group — those being cared for and those looking after them.', fields:'family' },
 ];
-function startOnboarding(type){
-  ONB = { step:0, type, data:{}, profile:{} };
+function startOnboarding(){
+  ONB = { step:0, data:{}, profile:{} };
   document.getElementById('onbOverlay').classList.add('open');
   renderOnb();
 }
+function pickFam(v){ ONB.fam=v; renderOnb(); }
 function renderOnb(){
   const s = ONB_STEPS[ONB.step];
   document.getElementById('onbStepLabel').textContent = `Step ${ONB.step+1} of ${ONB_STEPS.length}`;
@@ -1449,6 +1445,7 @@ function renderOnb(){
   document.getElementById('onbSub').textContent = s.sub;
   document.getElementById('onbErr').innerHTML='';
   document.getElementById('onbBack').style.display = ONB.step>0 ? 'block':'none';
+  document.getElementById('onbBack').textContent = 'Back';
   document.getElementById('onbNext').textContent = ONB.step===ONB_STEPS.length-1 ? 'Finish' : 'Continue';
   let h='';
   if(s.fields==='basics'){
@@ -1456,6 +1453,18 @@ function renderOnb(){
     h += onbInput('age','Your age','e.g. 62',ONB.data.age||'','number');
     h += onbInput('city','City','e.g. Bengaluru',ONB.data.city||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
+  } else if(s.fields==='family'){
+    h += '<div class="fam-choice'+(ONB.fam==='create'?' sel':'')+'" onclick="pickFam(\'create\')">'
+      +  '<div class="fam-ch-ic">\u{1F3E0}</div><div><div class="fam-ch-t">Set up my family</div>'
+      +  '<div class="fam-ch-d">Start the group and invite everyone with a link</div></div></div>'
+      +  '<div class="fam-choice'+(ONB.fam==='join'?' sel':'')+'" onclick="pickFam(\'join\')">'
+      +  '<div class="fam-ch-ic">\u{1F517}</div><div><div class="fam-ch-t">I have an invite</div>'
+      +  '<div class="fam-ch-d">Someone in the family sent you a link or code</div></div></div>'
+      +  '<div class="fam-choice'+(ONB.fam==='skip'?' sel':'')+'" onclick="pickFam(\'skip\')">'
+      +  '<div class="fam-ch-ic">\u{1F551}</div><div><div class="fam-ch-t">I\'ll do this later</div>'
+      +  '<div class="fam-ch-d">You can set this up any time from Family Group</div></div></div>'
+      +  (ONB.fam==='join' ? onbInput('invite_code','Invite code','e.g. C25CF09D', ONB.data.invite_code||'') : '')
+      +  (ONB.fam==='create' ? onbInput('group_name','Group name','e.g. Khandelwal Family', ONB.data.group_name||'') : '');
   } else if(s.fields==='function'){
     h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
     h += onbChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']],ONB.profile.eyesight);
@@ -1483,7 +1492,7 @@ function onbChips(id,label,opts,sel){
 function collectOnb(){
   document.querySelectorAll('#onbBody .onb-f').forEach(el=>{
     const k=el.dataset.k, v=el.value.trim();
-    if(['name','age','relation','city'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
+    if(['name','age','relation','city','invite_code','group_name'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
   });
   document.querySelectorAll('#onbBody .onb-c').forEach(el=>{
     const k=el.dataset.k, sel=el.querySelector('.dchip.sel');
@@ -1502,15 +1511,35 @@ async function onbNextStep(){
   try{
     await j('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
-      relation:ONB.data.relation||null, city:ONB.data.city||null, profile:ONB.profile })});
-    document.getElementById('onbOverlay').classList.remove('open');
-    window._acctType=null;
-    await familyStep();      // create / join / skip — the identity spine
+      city:ONB.data.city||null, profile:ONB.profile })});
+
+    // family choice, made on the last step of this same wizard
+    const pending = sessionStorage.getItem('pf_join_code');
+    try{
+      if(pending){
+        await joinWithCode(pending); sessionStorage.removeItem('pf_join_code');
+      } else if(ONB.fam==='create' && ONB.data.group_name){
+        const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({name:ONB.data.group_name, care_role:'carer'})});
+        closeOnb();
+        await showInvite(h.name, h.invite_code);
+      } else if(ONB.fam==='join' && ONB.data.invite_code){
+        await joinWithCode(ONB.data.invite_code);
+      }
+    }catch(e){ toast(e.message,'error'); }
+
+    closeOnb();
     await boot();
   }catch(e){
     document.getElementById('onbErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>';
     btn.disabled=false; btn.textContent='Finish';
   }
+}
+
+// the overlay is closed in exactly one place, so it can never be left stranded
+function closeOnb(){
+  document.getElementById('onbOverlay').classList.remove('open');
+  const stray = document.getElementById('famStep'); if(stray) stray.remove();
 }
 
 // adapt the interface to the care profile (eyesight → text size)
@@ -2890,51 +2919,6 @@ async function setCareRole(userId, role){
 // The rule that keeps identity clean: one human = one record. You either
 // create the group, join one with a code, or continue alone. Joining as an
 // elder offers existing manage-for-them records to CLAIM instead of duplicating.
-async function familyStep(){
-  // Full-screen moment, not a modal chain — the same treatment Life360 and
-  // Apple give it, because this decision is the spine of the whole app.
-  // If they arrived through an invite link, don't ask — just join.
-  const invited = sessionStorage.getItem('pf_join_code');
-  if(invited){ await joinWithCode(invited); sessionStorage.removeItem('pf_join_code'); return; }
-  return new Promise(done=>{
-    const el=document.createElement('div');
-    el.className='onb-overlay open'; el.id='famStep';
-    el.innerHTML =
-      '<div class="onb-card" style="max-width:520px;">'
-      + '<div class="onb-eyebrow">One last thing</div>'
-      + '<h1 class="onb-title">Your family, <em>together</em></h1>'
-      + '<p class="onb-sub">ParentFirst works as a family group — the people being cared for and the people looking after them, all connected.</p>'
-      + '<div class="fam-choice" onclick="famCreate()">'
-      +   '<div class="fam-ch-ic">&#127968;</div><div><div class="fam-ch-t">Set up my family</div>'
-      +   '<div class="fam-ch-d">Start the group and invite everyone with a link</div></div></div>'
-      + '<div class="fam-choice" onclick="famJoin()">'
-      +   '<div class="fam-ch-ic">&#128279;</div><div><div class="fam-ch-t">I have an invite</div>'
-      +   '<div class="fam-ch-d">Someone in the family sent you a link or code</div></div></div>'
-      + '<button class="onb-skip" onclick="famSkip()">I\'ll do this later</button>'
-      + '</div>';
-    document.body.appendChild(el);
-    window._famDone = ()=>{ el.remove(); done(); };
-  });
-}
-function famSkip(){ window._famDone(); }
-async function famCreate(){
-  const res = await formModal({ title:'Name your family group', subtitle:'Something everyone will recognise.', submitLabel:'Create group',
-    fields:[{id:'name', label:'Group name', placeholder:'e.g. Khandelwal Family'}] });
-  if(!res || !res.name) return;
-  try{
-    const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:res.name, care_role:'carer'})});
-    await showInvite(h.name, h.invite_code);
-    window._famDone();
-  }catch(e){ toast(e.message,'error'); }
-}
-async function famJoin(){
-  const res = await formModal({ title:'Join your family', subtitle:'Paste the code from the invite message.', submitLabel:'Join',
-    fields:[{id:'invite_code', label:'Invite code', placeholder:'e.g. C25CF09D'}] });
-  if(!res || !res.invite_code) return;
-  await joinWithCode(res.invite_code);
-  window._famDone && window._famDone();
-}
 async function joinWithCode(code){
   let joined;
   try{ joined = await j('/api/households/join',{method:'POST',headers:{'Content-Type':'application/json'},
