@@ -601,7 +601,7 @@
   <div class="auth-card onb-card">
     <div class="onb-progress"><div class="onb-bar" id="onbBar"></div></div>
     <div class="page-eyebrow" id="onbStepLabel">Step 1 of 3</div>
-    <h2 id="onbTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;margin-bottom:0.3rem;">Who are we caring for?</h2>
+    <h2 id="onbTitle" style="font-family:var(--font-display);font-size:24px;font-weight:400;margin-bottom:0.3rem;">Tell us about you</h2>
     <p class="msub" id="onbSub">A few details so we can set things up properly.</p>
     <div id="onbBody"></div>
     <div id="onbErr"></div>
@@ -1430,7 +1430,7 @@ async function boot(){
 // ═══════════ ONBOARDING WIZARD ═══════════
 let ONB = { step:0, type:'owner', data:{}, profile:{} };
 const ONB_STEPS = [
-  { title:'Who are we caring for?', sub:'A few basics to set things up.', fields:'basics' },
+  { title:'Tell us about you', sub:'A few basics to set up your own health vault.', fields:'basics' },
   { title:'Daily living', sub:'This helps us tailor the app and suggest the right support.', fields:'function' },
   { title:'Health & lifestyle', sub:'Last step — this powers the emergency card and insights.', fields:'health' },
 ];
@@ -1443,21 +1443,21 @@ function renderOnb(){
   const s = ONB_STEPS[ONB.step];
   document.getElementById('onbStepLabel').textContent = `Step ${ONB.step+1} of ${ONB_STEPS.length}`;
   document.getElementById('onbBar').style.width = ((ONB.step+1)/ONB_STEPS.length*100)+'%';
-  const self = ONB.type==='dependent';
-  document.getElementById('onbTitle').textContent = ONB.step===0 ? (self?'Tell us about yourself':'Who are we caring for?') : s.title;
+  // intake is always about the person signing up — one human, one record.
+  // Records for someone who won't use the app are created from Family Group.
+  document.getElementById('onbTitle').textContent = ONB.step===0 ? 'Tell us about you' : s.title;
   document.getElementById('onbSub').textContent = s.sub;
   document.getElementById('onbErr').innerHTML='';
   document.getElementById('onbBack').style.display = ONB.step>0 ? 'block':'none';
   document.getElementById('onbNext').textContent = ONB.step===ONB_STEPS.length-1 ? 'Finish' : 'Continue';
   let h='';
   if(s.fields==='basics'){
-    h += onbInput('name', self?'Your full name':'Their full name', self?'e.g. Harish Khandelwal':'e.g. Harish Khandelwal', ONB.data.name||'');
-    h += onbInput('age','Age','e.g. 85',ONB.data.age||'','number');
-    if(!self) h += onbInput('relation','Relation to you','e.g. father, mother',ONB.data.relation||'');
+    h += onbInput('name','Your full name','e.g. Sunita Khandelwal', ONB.data.name||'');
+    h += onbInput('age','Your age','e.g. 62',ONB.data.age||'','number');
     h += onbInput('city','City','e.g. Bengaluru',ONB.data.city||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
   } else if(s.fields==='function'){
-    h += onbChips('mobility','Getting around',[['independent','On their own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
+    h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
     h += onbChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']],ONB.profile.eyesight);
     h += onbChips('hearing','Hearing',[['good','Good'],['aid','Uses a hearing aid'],['poor','Poor'],['deaf','Very limited']],ONB.profile.hearing);
     h += onbChips('speech','Speech',[['clear','Clear'],['slurred','Slightly unclear'],['limited','Limited'],['nonverbal','Non-verbal']],ONB.profile.speech);
