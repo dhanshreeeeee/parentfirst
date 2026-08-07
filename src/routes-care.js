@@ -654,24 +654,36 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
   //   account_type 'dependent' → creates their OWN parent record, links user_id, role 'dependent'
   //   account_type 'owner'     → creates a parent record they administer (role 'admin')
   app.post('/api/onboarding', async (req, reply) => {
-    const { account_type, name, age, relation, city, profile } = req.body || {};
-    const isDependent = account_type === 'dependent';
-    const parentName = isDependent ? (name || req.user.name) : name;
-    if (!parentName) return reply.code(400).send({ error: 'name required' });
+    // Everyone who signs up gets exactly ONE record: their own. Whether their
+    // vault is shared is decided by their care_role in the household — never by
+    // creating extra records. This is what prevents the same human existing twice.
+    const { name, age, city, profile } = req.body || {};
+    const personName = name || req.user.name;
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const { rows } = await client.query(
-        `INSERT INTO parents (name, age, relation, city, created_by, user_id)
-         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-        [parentName, age || null, relation || null, city || null, req.user.id, isDependent ? req.user.id : null]);
-      const parent = rows[0];
+      // reuse the self record if one already exists (e.g. created by joining a group)
+      const { rows: existing } = await client.query(
+        'SELECT id FROM parents WHERE user_id=$1 ORDER BY created_at LIMIT 1', [req.user.id]);
+      let parent;
+      if (existing[0]) {
+        const { rows } = await client.query(
+          `UPDATE parents SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city)
+           WHERE id=$1 RETURNING *`,
+          [existing[0].id, personName, age || null, city || null]);
+        parent = rows[0];
+      } else {
+        const { rows } = await client.query(
+          `INSERT INTO parents (name, age, relation, city, created_by, user_id)
+           VALUES ($1,$2,'self',$3,$4,$4) RETURNING *`,
+          [personName, age || null, city || null, req.user.id]);
+        parent = rows[0];
+      }
       await client.query(
-        `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,$3)
-         ON CONFLICT (user_id, parent_id) DO UPDATE SET role=$3`,
-        [req.user.id, parent.id, isDependent ? 'dependent' : 'admin']);
+        `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'dependent')
+         ON CONFLICT (user_id, parent_id) DO UPDATE SET role='dependent'`,
+        [req.user.id, parent.id]);
       if (profile && typeof profile === 'object') await upsertProfile(client, parent.id, profile);
-      // allergies/conditions live on the parent for the emergency card
       if (profile?.allergies || profile?.conditions || profile?.blood_group) {
         await client.query(
           `UPDATE parents SET allergies=COALESCE($2,allergies), conditions=COALESCE($3,conditions),
@@ -680,7 +692,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       }
       await client.query('UPDATE users SET onboarded=true WHERE id=$1', [req.user.id]);
       await client.query('COMMIT');
-      return { parent, role: isDependent ? 'dependent' : 'admin' };
+      return { parent };
     } catch (e) {
       await client.query('ROLLBACK');
       throw e;

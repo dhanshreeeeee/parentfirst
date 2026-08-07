@@ -79,6 +79,7 @@ async function authPluginImpl(app, { pool }) {
       !isApi ||
       url === '/api/health' ||
       url.startsWith('/api/auth/') ||
+      url.startsWith('/api/households/peek/') ||
       url === '/api/activities';
 
     // resolve user from cookie (if any)

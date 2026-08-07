@@ -157,6 +157,17 @@
   .tab-n{ font-size:11px; opacity:0.6; margin-left:3px; }
   .doc-src{ font-size:11px; color:var(--ink-faint); }
   .doc-btn{ padding:7px 13px !important; font-size:12.5px !important; text-decoration:none; white-space:nowrap; }
+  .fam-choice{ display:flex; gap:15px; align-items:center; background:var(--white); border:2px solid var(--border); border-radius:16px; padding:1.15rem 1.25rem; margin-bottom:0.8rem; cursor:pointer; transition:all .15s; text-align:left; }
+  .fam-choice:hover{ border-color:var(--rust); transform:translateY(-1px); }
+  .fam-ch-ic{ font-size:28px; }
+  .fam-ch-t{ font-size:16px; font-weight:600; }
+  .fam-ch-d{ font-size:13px; color:var(--ink-muted); margin-top:2px; }
+  .onb-skip{ background:transparent; border:none; color:var(--ink-faint); font-size:13px; margin-top:0.6rem; text-decoration:underline; cursor:pointer; }
+  .inv-banner{ background:var(--sage-light); color:var(--sage); border-radius:12px; padding:11px 14px; font-size:13.5px; margin-bottom:1rem; line-height:1.5; }
+  .inv-link{ background:var(--cream); border:1px dashed var(--border-strong); border-radius:10px; padding:10px 13px; font-size:12.5px; word-break:break-all; color:var(--ink-muted); margin:0.4rem 0 0.9rem; }
+  .inv-row{ display:flex; gap:9px; flex-wrap:wrap; }
+  .inv-wa{ text-decoration:none; text-align:center; }
+  .inv-code-note{ font-size:12px; color:var(--ink-faint); margin-top:0.8rem; }
   .fam-empty{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:2rem; text-align:center; }
   .fam-empty h3{ font-family:var(--font-display); font-size:20px; font-weight:400; margin-bottom:0.5rem; }
   .fam-empty p{ font-size:14px; color:var(--ink-muted); max-width:420px; margin:0 auto 1.3rem; }
@@ -171,6 +182,7 @@
   .fam-meta{ font-size:12.5px; color:var(--ink-faint); margin-top:2px; }
   .fam-swap{ font-size:12px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink-muted); white-space:nowrap; }
   .fam-swap:hover{ border-color:var(--rust); color:var(--rust); }
+  .fam-managed{ font-size:10px; background:var(--gold-light); color:#7a5a08; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
   .fam-invite{ background:var(--ink); color:#fff; border-radius:var(--r-lg); padding:1.3rem 1.5rem; }
   .fam-inv-l{ font-size:11px; text-transform:uppercase; letter-spacing:0.6px; color:rgba(255,255,255,0.5); }
   .fam-code{ font-family:var(--font-display); font-size:30px; letter-spacing:3px; margin:0.3rem 0; }
@@ -568,8 +580,7 @@
       <input class="chat-input" id="authName" placeholder="Dhanshree" style="background:var(--white);width:100%;">
       <label class="dl-label">I am…</label>
       <div class="chip-row" id="authType">
-        <button type="button" class="dchip sel" data-val="owner" onclick="fmPick(this)">Caring for someone</button>
-        <button type="button" class="dchip" data-val="dependent" onclick="fmPick(this)">Signing up for myself</button>
+        <!-- one signup for everyone: your role in the family is chosen in the group step -->
       </div>
     </div>
     <label class="dl-label">Email</label>
@@ -1139,7 +1150,17 @@ function myRole(){ return PARENT ? PARENT.role : null; }
 function roleAtLeast(r, need){ const rank={caregiver:1,dependent:2,member:2,admin:3}; return (rank[r]||0)>=(rank[need]||99); }
 
 // ═══════════ AUTH ═══════════
-function showAuth(){ document.getElementById('authOverlay').classList.add('open'); }
+function renderInviteBanner(){
+  const b=document.getElementById('inviteBanner'); if(!b) return;
+  const code=sessionStorage.getItem('pf_join_code');
+  if(!code){ b.innerHTML=''; return; }
+  const h=window._pfInviteFrom;
+  b.innerHTML='<div class="inv-banner">&#128075; You\'ve been invited to join <b>'+esc(h?h.name:'a family group')+'</b>'
+    + (h?' ('+h.member_count+' member'+(h.member_count===1?'':'s')+')':'')
+    + '. Sign up and you\'ll be added automatically.</div>';
+}
+function showAuth(){ document.getElementById('authOverlay').classList.add('open');
+  renderInviteBanner(); }
 function hideAuth(){ document.getElementById('authOverlay').classList.remove('open'); }
 function toggleAuthMode(){
   AUTH_MODE = AUTH_MODE==='login' ? 'signup' : 'login';
@@ -1162,7 +1183,7 @@ async function submitAuth(){
   const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
   const typeBtn = document.querySelector('#authType .dchip.sel');
   const acctType = typeBtn ? typeBtn.dataset.val : 'owner';
-  const body = AUTH_MODE==='signup' ? {email,password,name,account_type:acctType} : {email,password};
+  const body = AUTH_MODE==='signup' ? {email,password,name} : {email,password};
   try{
     const r = await fetch(API+path, {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok){ const t=await r.json().catch(()=>({error:'Something went wrong'})); throw new Error(t.error); }
@@ -1217,7 +1238,7 @@ function renderParentMenu(){
   for(const p of ME.parents){
     html += '<button class="pick-item '+(PARENT&&p.id===PARENT.id?'active':'')+'" onclick="switchParent(\''+p.id+'\')"><span class="pick-av">'+esc(p.name[0])+'</span>'+esc(p.name)+'<span class="pick-role">'+esc(p.role)+'</span></button>';
   }
-  html += '<div class="pick-div"></div><button class="pick-item" onclick="openAddParent()"><span class="pick-av">+</span>Add a parent</button>';
+  html += '<div class="pick-div"></div><button class="pick-item" onclick="goFamily()"><span class="pick-av">+</span>Family group</button>';
   menu.innerHTML=html;
 }
 function renderUserMenu(){
@@ -1257,25 +1278,34 @@ function applyRoleUI(){
 }
 
 // add parent (admin action) — styled modal
-async function openAddParent(){
-  closeMenus('');
+function goFamily(){ nav_('family'); closeMenus(''); }
+async function addManagedMember(){
+  if(!HOUSE){ toast('Create or join a family group first.','error'); return; }
   const res = await formModal({
-    title: 'Add a parent',
-    subtitle: 'Create a new care space. You\'ll be their admin.',
-    submitLabel: 'Add parent',
-    fields: [
-      {id:'name', label:'Name', placeholder:'e.g. Sunita Devi'},
-      {id:'age', label:'Age (optional)', placeholder:'e.g. 72', type:'number'},
-      {id:'relation', label:'Relation (optional)', placeholder:'e.g. mother'},
+    title:'Add someone who doesn\'t use apps',
+    subtitle:'For a parent or grandparent who won\'t sign in themselves. The family manages their record — and if they ever do sign up, they can claim it with all its history.',
+    submitLabel:'Add',
+    fields:[
+      {id:'name', label:'Their name', placeholder:'e.g. Harish Khandelwal'},
+      {id:'age', label:'Age', type:'number', placeholder:'e.g. 85'},
+      {id:'relation', label:'Relation to you', placeholder:'e.g. Father'},
+      {id:'city', label:'City', placeholder:'e.g. Bengaluru'},
     ],
   });
-  if(!res || !res.name){ return; }
+  if(!res || !res.name) return;
   try{
-    await j('/api/parents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:res.name,age:res.age?+res.age:null,relation:res.relation||null})});
+    await j('/api/households/'+HOUSE.id+'/managed',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:res.name, age:res.age?+res.age:null, relation:res.relation, city:res.city})});
+    toast(res.name+' added — the family can now manage their record.','success');
     ME = await j('/api/me');
-    renderParentMenu();
-    toast(res.name+' added. Switch to them from the parent menu.','success');
-  }catch(e){ toast('Could not add: '+e.message,'error'); }
+  // invite link tapped by someone who already has an account
+  const pendingJoin = sessionStorage.getItem('pf_join_code');
+  if (pendingJoin && ME && ME.user) {
+    sessionStorage.removeItem('pf_join_code');
+    await joinWithCode(pendingJoin);
+    ME = await j('/api/me');
+  } loadFamily();
+  }catch(e){ toast(e.message,'error'); }
 }
 // family & roles — styled modal
 async function openMembers(){
@@ -1350,6 +1380,17 @@ async function init(){
   await boot();
 }
 
+// invite deep link — runs before anything else
+(function(){
+  const code = new URLSearchParams(location.search).get('join');
+  if(!code) return;
+  sessionStorage.setItem('pf_join_code', code.toUpperCase());
+  history.replaceState({}, '', location.pathname);   // keep the code out of the URL bar
+  fetch('/api/households/peek/'+encodeURIComponent(code.toUpperCase()))
+    .then(r=>r.ok?r.json():null)
+    .then(h=>{ if(h) window._pfInviteFrom = h; })
+    .catch(()=>{});
+})();
 async function boot(){
   ME = await j('/api/me');
   hideAuth();
@@ -1450,10 +1491,11 @@ async function onbNextStep(){
   const btn=document.getElementById('onbNext'); btn.disabled=true; btn.textContent='Setting up…';
   try{
     await j('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-      account_type:ONB.type, name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
+      name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
       relation:ONB.data.relation||null, city:ONB.data.city||null, profile:ONB.profile })});
     document.getElementById('onbOverlay').classList.remove('open');
     window._acctType=null;
+    await familyStep();      // create / join / skip — the identity spine
     await boot();
   }catch(e){
     document.getElementById('onbErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>';
@@ -2787,39 +2829,153 @@ async function loadFamily(){
     + (d.me.is_owner && m.user_id!==ME.user.id
         ? '<button class="fam-swap" onclick="setCareRole(\''+m.user_id+'\',\''+(m.care_role==='elder'?'carer':'elder')+'\')">Make '+(m.care_role==='elder'?'carer':'cared for')+'</button>' : '')
     + '</div>';
+  let managed=[];
+  try{ managed = await j('/api/households/'+HOUSE.id+'/claimable'); }catch(e){}
+  const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc(m.name[0])+'</div>'
+    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+' <span class="fam-managed">managed by family</span></div>'
+    + '<div class="fam-meta">'+(m.age?m.age+' · ':'')+(m.relation?esc(m.relation)+' · ':'')+m.report_count+' reports · '+m.med_count+' medicines</div></div></div>';
   body.innerHTML =
-    '<div class="fam-sec"><h4>Being cared for <span class="fam-n">'+elders.length+'</span></h4>'
+    '<div class="fam-sec"><h4>Being cared for <span class="fam-n">'+(elders.length+managed.length)+'</span></h4>'
+    + managed.map(mCard).join('')
     + (elders.length? elders.map(card).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — mark a member as cared for.</div>')
     + '</div>'
     + '<div class="fam-sec"><h4>Looking after them <span class="fam-n">'+carers.length+'</span></h4>'+carers.map(card).join('')+'</div>'
+    + '<div style="margin:0 0 1.5rem;"><button class="btn-out" onclick="addManagedMember()">+ Add someone who doesn\'t use apps</button></div>'
     + (d.invite_code
-        ? '<div class="fam-invite"><div class="fam-inv-l">Invite code</div><div class="fam-code">'+esc(d.invite_code)+'</div>'
-          + '<div class="fam-inv-hint">Share this with family. They sign up, then enter it to join the group.</div></div>'
+        ? '<div class="fam-invite"><div class="fam-inv-l">Invite your family</div>'
+          + '<div class="inv-row" style="margin-top:0.6rem;">'
+          + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(d.household.name, d.invite_code))+'">Share on WhatsApp</a>'
+          + '<button class="btn-out" style="color:#fff;border-color:rgba(255,255,255,0.4);" onclick="navigator.clipboard.writeText(inviteLink(\''+esc(d.invite_code)+'\')).then(()=>toast(\'Link copied.\',\'success\'))">Copy link</button>'
+          + '</div>'
+          + '<div class="fam-inv-hint" style="margin-top:0.7rem;">They tap the link, sign up, and land in your group. Code: <b>'+esc(d.invite_code)+'</b></div></div>'
         : '')
     + '<div class="disclaimer">Everyone in a group can see the vaults of those being cared for. A carer\'s own vault stays private to them.</div>';
 }
 async function createHousehold(){
-  const res=await formModal({ title:'Create a family group', subtitle:'Give it a name your family will recognise.', submitLabel:'Create',
-    fields:[{id:'name',label:'Group name',placeholder:'e.g. Khandelwal Family'},
-            {id:'care_role',label:'And you are…',options:[{label:'Looking after someone',value:'carer'},{label:'Being cared for',value:'elder'}]}] });
+  const res = await formModal({ title:'Name your family group', subtitle:'Something everyone will recognise.', submitLabel:'Create group',
+    fields:[{id:'name', label:'Group name', placeholder:'e.g. Khandelwal Family'}] });
   if(!res || !res.name) return;
-  try{ await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
-    toast('Group created.','success'); ME=await j('/api/me'); loadFamily(); }
-  catch(e){ toast(e.message,'error'); }
+  try{
+    const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:res.name, care_role:'carer'})});
+    await showInvite(h.name, h.invite_code);
+    ME = await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
 }
 async function joinHousehold(){
-  const res=await formModal({ title:'Join a family group', subtitle:'Ask whoever set it up for the invite code.', submitLabel:'Join',
-    fields:[{id:'invite_code',label:'Invite code',placeholder:'e.g. C25CF09D'},
-            {id:'care_role',label:'You are…',options:[{label:'Looking after someone',value:'carer'},{label:'Being cared for',value:'elder'}]}] });
+  const res = await formModal({ title:'Join your family', subtitle:'Paste the code from the invite message.', submitLabel:'Join',
+    fields:[{id:'invite_code', label:'Invite code', placeholder:'e.g. C25CF09D'}] });
   if(!res || !res.invite_code) return;
-  try{ await j('/api/households/join',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
-    toast('Joined.','success'); ME=await j('/api/me'); loadFamily(); }
-  catch(e){ toast(e.message,'error'); }
+  await joinWithCode(res.invite_code);
+  ME = await j('/api/me'); loadFamily();
 }
 async function setCareRole(userId, role){
   try{ await j('/api/households/'+HOUSE.id+'/members/'+userId+'/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({care_role:role})});
     toast('Updated.','success'); ME=await j('/api/me'); loadFamily(); }
   catch(e){ toast(e.message,'error'); }
+}
+
+
+// ═══════════ FAMILY STEP (runs once after intake) ═══════════
+// The rule that keeps identity clean: one human = one record. You either
+// create the group, join one with a code, or continue alone. Joining as an
+// elder offers existing manage-for-them records to CLAIM instead of duplicating.
+async function familyStep(){
+  // Full-screen moment, not a modal chain — the same treatment Life360 and
+  // Apple give it, because this decision is the spine of the whole app.
+  // If they arrived through an invite link, don't ask — just join.
+  const invited = sessionStorage.getItem('pf_join_code');
+  if(invited){ await joinWithCode(invited); sessionStorage.removeItem('pf_join_code'); return; }
+  return new Promise(done=>{
+    const el=document.createElement('div');
+    el.className='onb-overlay open'; el.id='famStep';
+    el.innerHTML =
+      '<div class="onb-card" style="max-width:520px;">'
+      + '<div class="onb-eyebrow">One last thing</div>'
+      + '<h1 class="onb-title">Your family, <em>together</em></h1>'
+      + '<p class="onb-sub">ParentFirst works as a family group — the people being cared for and the people looking after them, all connected.</p>'
+      + '<div class="fam-choice" onclick="famCreate()">'
+      +   '<div class="fam-ch-ic">&#127968;</div><div><div class="fam-ch-t">Set up my family</div>'
+      +   '<div class="fam-ch-d">Start the group and invite everyone with a link</div></div></div>'
+      + '<div class="fam-choice" onclick="famJoin()">'
+      +   '<div class="fam-ch-ic">&#128279;</div><div><div class="fam-ch-t">I have an invite</div>'
+      +   '<div class="fam-ch-d">Someone in the family sent you a link or code</div></div></div>'
+      + '<button class="onb-skip" onclick="famSkip()">I\'ll do this later</button>'
+      + '</div>';
+    document.body.appendChild(el);
+    window._famDone = ()=>{ el.remove(); done(); };
+  });
+}
+function famSkip(){ window._famDone(); }
+async function famCreate(){
+  const res = await formModal({ title:'Name your family group', subtitle:'Something everyone will recognise.', submitLabel:'Create group',
+    fields:[{id:'name', label:'Group name', placeholder:'e.g. Khandelwal Family'}] });
+  if(!res || !res.name) return;
+  try{
+    const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:res.name, care_role:'carer'})});
+    await showInvite(h.name, h.invite_code);
+    window._famDone();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function famJoin(){
+  const res = await formModal({ title:'Join your family', subtitle:'Paste the code from the invite message.', submitLabel:'Join',
+    fields:[{id:'invite_code', label:'Invite code', placeholder:'e.g. C25CF09D'}] });
+  if(!res || !res.invite_code) return;
+  await joinWithCode(res.invite_code);
+  window._famDone && window._famDone();
+}
+async function joinWithCode(code){
+  let joined;
+  try{ joined = await j('/api/households/join',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({invite_code:code})}); }
+  catch(e){ toast(e.message,'error'); return; }
+  toast('Welcome to '+joined.household.name+'.','success');
+  // "is one of these you?" — links their signup to the record the family
+  // already keeps, so history is never split across two people
+  const claimable = joined.claimable||[];
+  if(claimable.length){
+    const opts = claimable.map(c=>({label:c.name+(c.age?', '+c.age:'')+' — '+c.report_count+' reports, '+c.med_count+' medicines', value:c.id}));
+    opts.push({label:'None of these — I\'m joining to help care for them', value:''});
+    const pick = await formModal({ title:'Is one of these you?',
+      subtitle:'Your family already keeps records for these people. If one is you, claim it — all its history becomes yours.',
+      submitLabel:'Continue', fields:[{id:'parent_id', label:'', options:opts}] });
+    if(pick && pick.parent_id){
+      try{
+        await j('/api/households/'+joined.household.id+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parent_id:pick.parent_id})});
+        toast('That record is now yours — history included.','success');
+      }catch(e){ toast(e.message,'error'); }
+    }
+  }
+}
+function inviteLink(code){ return location.origin+'/?join='+encodeURIComponent(code); }
+function inviteText(famName, code){
+  return 'Join our family on ParentFirst \u2764\ufe0f\n\n'+famName+'\n'+inviteLink(code)+'\n\nOpen the link, sign up, and you\'re in.';
+}
+async function showInvite(famName, code){
+  const link = inviteLink(code);
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='modal-bg open';
+    bg.innerHTML='<div class="modal" style="max-width:460px;"><h2>Invite your family</h2>'
+      + '<p class="msub">Send this link — they tap it, sign up, and land straight in your group.</p>'
+      + '<div class="inv-link" id="invLinkBox">'+esc(link)+'</div>'
+      + '<div class="inv-row">'
+      + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(famName, code))+'">Share on WhatsApp</a>'
+      + '<button class="btn-out" onclick="navigator.clipboard.writeText(document.getElementById(\'invLinkBox\').textContent).then(()=>toast(\'Link copied.\',\'success\'))">Copy link</button>'
+      + '</div>'
+      + '<p class="inv-code-note">Or share the code: <b>'+esc(code)+'</b></p>'
+      + '<div class="modal-actions"><button class="btn-primary" id="invDone">Done</button></div></div>';
+    bg.querySelector('#invDone').onclick=()=>{ bg.remove(); res(); };
+    document.body.appendChild(bg);
+  });
+}
+async function modalInfo(title, html){
+  return new Promise(res=>{
+    const bg=document.createElement('div'); bg.className='modal-bg open';
+    bg.innerHTML='<div class="modal" style="max-width:430px;"><h2>'+esc(title)+'</h2><p class="msub" style="line-height:1.7;">'+html+'</p><div class="modal-actions"><button class="btn-primary">Done</button></div></div>';
+    bg.querySelector('button').onclick=()=>{ bg.remove(); res(); };
+    document.body.appendChild(bg);
+  });
 }
 
 init();

@@ -63,6 +63,19 @@ export default async function householdRoutes(app, { pool }) {
          ON CONFLICT (user_id, parent_id) DO UPDATE SET role='admin'`,
         [c.user_id, selfRecord[c.user_id]]);
     }
+
+    // managed members: people in the household WITHOUT a login (added by a carer,
+    // e.g. an elder who doesn't use apps). Every carer gets access; owners admin.
+    const { rows: managed } = await client.query(
+      'SELECT id FROM parents WHERE household_id=$1 AND user_id IS NULL', [householdId]);
+    for (const m of managed) {
+      for (const c of carers) {
+        await client.query(
+          `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,$3)
+           ON CONFLICT (user_id, parent_id) DO UPDATE SET role=$3`,
+          [c.user_id, m.id, c.is_owner ? 'admin' : 'member']);
+      }
+    }
   }
 
   async function myMembership(userId, householdId) {
@@ -70,6 +83,18 @@ export default async function householdRoutes(app, { pool }) {
       'SELECT * FROM household_members WHERE user_id=$1 AND household_id=$2', [userId, householdId]);
     return rows[0] || null;
   }
+
+  // Peek at a group by invite code — used by invite links to greet the person
+  // ("You've been invited to the Khandelwal Family") before they sign up.
+  // Public by design; reveals only the name and size, never members or data.
+  app.get('/api/households/peek/:code', { config: { public: true } }, async (req, reply) => {
+    const { rows } = await pool.query(
+      `SELECT h.name, (SELECT count(*)::int FROM household_members m WHERE m.household_id=h.id) AS member_count
+       FROM households h WHERE h.invite_code=$1`,
+      [String(req.params.code).trim().toUpperCase()]);
+    if (!rows[0]) return reply.code(404).send({ error: 'no group with that code' });
+    return rows[0];
+  });
 
   // ── my households ─────────────────────────────────────────────
   app.get('/api/households', async (req) => {
@@ -115,8 +140,14 @@ export default async function householdRoutes(app, { pool }) {
          VALUES ($1,$2,$3) ON CONFLICT (household_id, user_id) DO NOTHING`,
         [h[0].id, req.user.id, care_role === 'elder' ? 'elder' : 'carer']);
       await syncHousehold(client, h[0].id);
+      // anything the new member could claim (records managed for someone without a login)
+      const { rows: claimable } = await client.query(
+        `SELECT id, name, age, relation,
+                (SELECT count(*)::int FROM reports r WHERE r.parent_id=parents.id) AS report_count,
+                (SELECT count(*)::int FROM medications m WHERE m.parent_id=parents.id AND m.active) AS med_count
+         FROM parents WHERE household_id=$1 AND user_id IS NULL ORDER BY created_at`, [h[0].id]);
       await client.query('COMMIT');
-      return { joined: true, household: h[0] };
+      return { joined: true, household: h[0], claimable };
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   });
 
@@ -191,6 +222,88 @@ export default async function householdRoutes(app, { pool }) {
         [req.params.id, req.params.userId]);
       await client.query('COMMIT');
       return { removed: true };
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
+  // ── add someone who doesn't use apps (managed member) ─────────
+  app.post('/api/households/:id/managed', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member of this group' });
+    const { name, age, relation, city } = req.body || {};
+    if (!name) return reply.code(400).send({ error: 'name required' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows } = await client.query(
+        `INSERT INTO parents (name, age, relation, city, created_by, household_id)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [name, age || null, relation || null, city || null, req.user.id, req.params.id]);
+      await syncHousehold(client, req.params.id);
+      await client.query('COMMIT');
+      return rows[0];
+    } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
+  // Records in this household that have no login yet — shown to a newly joined
+  // elder so they can say "that's me" instead of a duplicate being created.
+  app.get('/api/households/:id/claimable', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member of this group' });
+    const { rows } = await pool.query(
+      `SELECT id, name, age, relation, city,
+              (SELECT count(*)::int FROM reports r WHERE r.parent_id=parents.id) AS report_count,
+              (SELECT count(*)::int FROM medications m WHERE m.parent_id=parents.id AND m.active) AS med_count
+       FROM parents WHERE household_id=$1 AND user_id IS NULL ORDER BY created_at`, [req.params.id]);
+    return rows;
+  });
+
+  // "That's me" — link the signed-in user to a managed record, so all its history
+  // (reports, medicines, vitals) becomes theirs. Their empty auto-created self
+  // record, if any, is folded away. One person, one record.
+  app.post('/api/households/:id/claim', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member of this group' });
+    const { parent_id } = req.body || {};
+    if (!parent_id) return reply.code(400).send({ error: 'parent_id required' });
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const { rows: target } = await client.query(
+        'SELECT * FROM parents WHERE id=$1 AND household_id=$2 AND user_id IS NULL FOR UPDATE',
+        [parent_id, req.params.id]);
+      if (!target[0]) {
+        await client.query('ROLLBACK');
+        return reply.code(400).send({ error: 'that record is not claimable' });
+      }
+      // find the empty self-record the join may have auto-created
+      const { rows: selfRec } = await client.query(
+        'SELECT id FROM parents WHERE user_id=$1 ORDER BY created_at LIMIT 1', [req.user.id]);
+      if (selfRec[0]) {
+        const sid = selfRec[0].id;
+        // only fold it away if it's genuinely empty — never delete history
+        const { rows: cnt } = await client.query(
+          `SELECT (SELECT count(*) FROM reports WHERE parent_id=$1)
+                + (SELECT count(*) FROM medications WHERE parent_id=$1)
+                + (SELECT count(*) FROM vitals WHERE parent_id=$1)
+                + (SELECT count(*) FROM checkins WHERE parent_id=$1) AS n`, [sid]);
+      if (+cnt[0].n === 0) {
+          await client.query('DELETE FROM family_members WHERE parent_id=$1', [sid]);
+          await client.query('DELETE FROM care_profiles WHERE parent_id=$1', [sid]);
+          await client.query('DELETE FROM parents WHERE id=$1', [sid]);
+        }
+      }
+      await client.query('UPDATE parents SET user_id=$2 WHERE id=$1', [parent_id, req.user.id]);
+      await client.query(
+        `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'dependent')
+         ON CONFLICT (user_id, parent_id) DO UPDATE SET role='dependent'`,
+        [req.user.id, parent_id]);
+      // they are being cared for
+      await client.query(
+        `UPDATE household_members SET care_role='elder' WHERE household_id=$1 AND user_id=$2`,
+        [req.params.id, req.user.id]);
+      await syncHousehold(client, req.params.id);
+      await client.query('COMMIT');
+      return { claimed: true, parent_id };
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
   });
 
