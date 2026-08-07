@@ -185,7 +185,7 @@ async function authPluginImpl(app, { pool }) {
   function setCookie(reply, token) {
     reply.setCookie(COOKIE, token, {
       path: '/', httpOnly: true, sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',   // HTTPS only in production
+      secure: process.env.NODE_ENV === 'production' && !process.env.ALLOW_INSECURE_COOKIE,
       maxAge: SESSION_DAYS * 86400,
     });
   }

@@ -1388,7 +1388,7 @@ async function init(){
   history.replaceState({}, '', location.pathname);   // keep the code out of the URL bar
   fetch('/api/households/peek/'+encodeURIComponent(code.toUpperCase()))
     .then(r=>r.ok?r.json():null)
-    .then(h=>{ if(h) window._pfInviteFrom = h; })
+    .then(h=>{ if(h){ window._pfInviteFrom = h; if(typeof renderInviteBanner==='function') renderInviteBanner(); } })
     .catch(()=>{});
 })();
 async function boot(){

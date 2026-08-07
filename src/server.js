@@ -48,17 +48,25 @@ const app = Fastify({
 // the UI loads Google Fonts and YouTube thumbnails.
 await app.register(helmet, {
   contentSecurityPolicy: {
+    useDefaults: false,
     directives: {
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'"],
+      // the UI uses onclick="" throughout — without this every button is dead
+      scriptSrcAttr: ["'unsafe-inline'"],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
       fontSrc: ["'self'", 'https://fonts.gstatic.com'],
       imgSrc: ["'self'", 'data:', 'blob:', 'https://img.youtube.com'],
       mediaSrc: ["'self'", 'blob:'],
       frameSrc: ['https://www.youtube.com'],
-      connectSrc: ["'self'"],
+      connectSrc: ["'self'", 'https://api.anthropic.com'],
+      // deliberately NOT upgrade-insecure-requests: it breaks plain-http LAN use
     },
   },
+  // HSTS would pin browsers to https:// even on the LAN — only enable behind a proxy
+  hsts: false,
+  crossOriginOpenerPolicy: false,
+  originAgentCluster: false,
   crossOriginEmbedderPolicy: false,
 });
 
