@@ -184,6 +184,9 @@
   .fam-swap{ font-size:12px; background:transparent; border:1.5px solid var(--border-strong); border-radius:10px; padding:7px 12px; color:var(--ink-muted); white-space:nowrap; }
   .fam-swap:hover{ border-color:var(--rust); color:var(--rust); }
   .fam-managed{ font-size:10px; background:var(--gold-light); color:#7a5a08; padding:2px 8px; border-radius:20px; text-transform:uppercase; letter-spacing:0.4px; }
+  #famPrompt{ background:var(--gold-light); border:1px solid rgba(184,134,11,0.3); border-radius:var(--r-lg); padding:1rem 1.25rem; margin-bottom:1.5rem; }
+  .fp-in{ display:flex; gap:14px; align-items:center; justify-content:space-between; flex-wrap:wrap; font-size:13.5px; color:#7a5a08; line-height:1.55; }
+  .fp-btn{ padding:9px 16px !important; font-size:13px !important; white-space:nowrap; }
   .fam-add{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1.2rem 1.3rem; margin-bottom:1.25rem; }
   .fam-add h4{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.4rem; }
   .fam-add-p{ font-size:13px; color:var(--ink-muted); margin-bottom:0.9rem; }
@@ -646,6 +649,7 @@
   </aside>
   <main class="main">
     <!-- PARENT MONITOR -->
+    <div id="famPrompt" style="display:none;"></div>
     <div class="view active" id="view-monitor">
       <div class="page-eyebrow">Parent Monitor</div>
       <h1 class="pt" id="monTitle">How is <em>everyone?</em></h1>
@@ -1457,6 +1461,7 @@ async function boot(){
   if(!IS_DEPENDENT) loadMonitor();
   nav_(IS_DEPENDENT ? 'me' : 'monitor');
   startReminders();
+  checkFamilyPrompt();
 }
 
 // ═══════════ ONBOARDING WIZARD ═══════════
@@ -1464,7 +1469,6 @@ let ONB = { step:0, type:'owner', data:{}, profile:{} };
 // Two paths, because a carer and a parent need different things.
 const STEPS_CARER = [
   { title:'Tell us about you', sub:'Just the basics — you can add health details later.', fields:'basics' },
-  { title:'Name your family', sub:'You\'ll be the admin. Add everyone else by their email once they sign up.', fields:'group' },
 ];
 const STEPS_PARENT = [
   { title:'Tell us about you', sub:'A few basics to set up your health vault.', fields:'basics' },
@@ -1498,9 +1502,6 @@ function renderOnb(){
     h += onbInput('city','Where you live','e.g. Bengaluru',ONB.data.city||'');
     h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
-  } else if(s.fields==='group'){
-    h += onbInput('group_name','Family group name','e.g. Khandelwal Family', ONB.data.group_name||'')
-      +  '<p class="onb-note">Once your parents and siblings sign up, add them from <b>Family Group</b> using their email address.</p>';
   } else if(s.fields==='function'){
     h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
     h += onbChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']],ONB.profile.eyesight);
@@ -1550,13 +1551,9 @@ async function onbNextStep(){
       city:ONB.data.city||null, phone:ONB.data.phone||null,
       account_type:ONB.role, profile:ONB.profile })});
 
-    // a carer becomes admin of the group they just named
+    // group setup happens in the app, not here — one person creates it,
+    // everyone else gets added by the admin
     try{
-      if(ONB.role!=='parent' && ONB.data.group_name){
-        await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({name:ONB.data.group_name, care_role:'carer'})});
-      }
-      // if they arrived by invite link, join that group instead
       const pending = sessionStorage.getItem('pf_join_code');
       if(pending){ await joinWithCode(pending); sessionStorage.removeItem('pf_join_code'); }
     }catch(e){ toast(e.message,'error'); }
@@ -3008,6 +3005,21 @@ async function modalInfo(title, html){
     bg.querySelector('button').onclick=()=>{ bg.remove(); res(); };
     document.body.appendChild(bg);
   });
+}
+
+// If they're not in a family group yet, say so once — and make clear that
+// joining is usually someone else's job, not a second group.
+async function checkFamilyPrompt(){
+  let list=[];
+  try{ list = await j('/api/households'); }catch(e){ return; }
+  const bar=document.getElementById('famPrompt'); if(!bar) return;
+  if(list.length){ bar.style.display='none'; return; }
+  bar.style.display='block';
+  bar.innerHTML =
+    '<div class="fp-in"><div><b>You\'re not in a family group yet.</b> '
+    + 'If someone in your family has already set one up, ask them to add you using '
+    + '<b>'+esc(ME.user.email)+'</b>. If nobody has, you can start it.</div>'
+    + '<button class="btn-primary fp-btn" onclick="createHousehold()">Create the group</button></div>';
 }
 
 init();
