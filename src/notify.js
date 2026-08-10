@@ -81,3 +81,26 @@ export async function notifyOperator(app, subject, lines) {
     return { sent: false, reason: e.message };
   }
 }
+
+// ── WhatsApp via Meta Cloud API ──
+// Activates only when WHATSAPP_TOKEN and WHATSAPP_PHONE_ID are in .env.
+// Numbers must be E.164 without '+' (e.g. 9198xxxxxx01). Free-form text works
+// inside the 24-hour session window; outside it Meta requires a template.
+export async function sendWhatsApp(app, numbers, text) {
+  const token = process.env.WHATSAPP_TOKEN;
+  const phoneId = process.env.WHATSAPP_PHONE_ID;
+  if (!token || !phoneId || !numbers?.length) return { skipped: true };
+  for (const raw of numbers) {
+    const to = String(raw).replace(/[^0-9]/g, '');
+    if (!to) continue;
+    try {
+      const r = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: text } }),
+      });
+      if (!r.ok) app.log.warn('whatsapp send failed: ' + (await r.text()).slice(0, 200));
+    } catch (e) { app.log.warn('whatsapp send error: ' + e.message); }
+  }
+  return { sent: true };
+}

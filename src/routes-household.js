@@ -33,6 +33,9 @@ export default async function householdRoutes(app, { pool }) {
   }
 
   // Rebuild access rows from household membership.
+  // IMPORTANT: this must REVOKE as well as grant. When someone changes from
+  // carer to elder, the access they held over other people has to disappear —
+  // otherwise one person being cared for can still read another's vault.
   async function syncHousehold(client, householdId) {
     const { rows: members } = await client.query(
       'SELECT user_id, care_role, is_owner FROM household_members WHERE household_id=$1', [householdId]);
@@ -41,6 +44,22 @@ export default async function householdRoutes(app, { pool }) {
 
     const elders = members.filter((m) => m.care_role === 'elder');
     const carers = members.filter((m) => m.care_role !== 'elder');
+
+    // Clear every cross-person grant inside this household, then rebuild only
+    // what the current roles justify. Own-record rows are left untouched.
+    const householdParentIds = Object.values(selfRecord);
+    const { rows: managedIds } = await client.query(
+      'SELECT id FROM parents WHERE household_id=$1 AND user_id IS NULL', [householdId]);
+    const allIds = [...householdParentIds, ...managedIds.map((m) => m.id)];
+    if (allIds.length) {
+      await client.query(
+        `DELETE FROM family_members fm
+         USING parents p
+         WHERE fm.parent_id = p.id
+           AND p.id = ANY($1::uuid[])
+           AND (p.user_id IS NULL OR fm.user_id <> p.user_id)`,
+        [allIds]);
+    }
 
     for (const e of elders) {
       const pid = selfRecord[e.user_id];
@@ -232,7 +251,7 @@ export default async function householdRoutes(app, { pool }) {
     if (!me || !me.is_owner) return reply.code(403).send({ error: 'only the group admin can add people' });
     const { email, care_role } = req.body || {};
     if (!email) return reply.code(400).send({ error: 'email required' });
-    const { rows: u } = await pool.query('SELECT id, name FROM users WHERE email=$1', [String(email).trim().toLowerCase()]);
+    const { rows: u } = await pool.query('SELECT id, name, signup_role FROM users WHERE email=$1', [String(email).trim().toLowerCase()]);
     if (!u[0]) {
       return reply.code(404).send({ error: 'No account with that email yet. Ask them to sign up first, then add them.' });
     }
@@ -242,13 +261,28 @@ export default async function householdRoutes(app, { pool }) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      // they already said who they are at signup — honour it unless overridden
+      const resolved = care_role
+        ? (care_role === 'elder' ? 'elder' : 'carer')
+        : (u[0].signup_role === 'parent' ? 'elder' : 'carer');
       await client.query(
         'INSERT INTO household_members (household_id, user_id, care_role) VALUES ($1,$2,$3)',
-        [req.params.id, u[0].id, care_role === 'elder' ? 'elder' : 'carer']);
+        [req.params.id, u[0].id, resolved]);
       await syncHousehold(client, req.params.id);
       await client.query('COMMIT');
-      return { added: true, name: u[0].name };
+      return { added: true, name: u[0].name, care_role: resolved };
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
+  // Look someone up by email so the admin sees who they are and what they
+  // signed up as, instead of guessing.
+  app.get('/api/households/:id/lookup', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me || !me.is_owner) return reply.code(403).send({ error: 'only the group admin can do that' });
+    const { rows } = await pool.query(
+      'SELECT name, signup_role FROM users WHERE email=$1', [String(req.query.email || '').trim().toLowerCase()]);
+    if (!rows[0]) return reply.code(404).send({ error: 'No account with that email yet. Ask them to sign up first.' });
+    return { name: rows[0].name, signup_role: rows[0].signup_role || 'carer' };
   });
 
   // ── add someone who doesn't use apps (managed member) ─────────
@@ -331,6 +365,34 @@ export default async function householdRoutes(app, { pool }) {
       await client.query('COMMIT');
       return { claimed: true, parent_id };
     } catch (e) { await client.query('ROLLBACK'); throw e; } finally { client.release(); }
+  });
+
+  // ── community events (shared board for the household) ─────────
+  app.get('/api/households/:id/events', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member' });
+    const { rows } = await pool.query(
+      `SELECT e.*, u.name AS by_name FROM events e LEFT JOIN users u ON u.id=e.created_by
+       WHERE e.household_id=$1 AND e.event_date >= CURRENT_DATE - 1
+       ORDER BY e.event_date, e.event_time NULLS LAST LIMIT 50`, [req.params.id]);
+    return rows;
+  });
+  app.post('/api/households/:id/events', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member' });
+    const { title, event_date, event_time, place, notes } = req.body || {};
+    if (!title || !event_date) return reply.code(400).send({ error: 'title and date required' });
+    const { rows } = await pool.query(
+      `INSERT INTO events (household_id, title, event_date, event_time, place, notes, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [req.params.id, title, event_date, event_time || null, place || null, notes || null, req.user.id]);
+    return rows[0];
+  });
+  app.delete('/api/households/:id/events/:eventId', async (req, reply) => {
+    const me = await myMembership(req.user.id, req.params.id);
+    if (!me) return reply.code(403).send({ error: 'not a member' });
+    await pool.query('DELETE FROM events WHERE id=$1 AND household_id=$2', [req.params.eventId, req.params.id]);
+    return { deleted: true };
   });
 
   // everyone who should be told when something urgent happens to this person

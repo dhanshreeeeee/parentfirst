@@ -15,6 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { extractLocal } from './extract-local.js';
 import careRoutes from './routes-care.js';
 import householdRoutes from './routes-household.js';
+import { startDigest } from './digest.js';
+import webpush from 'web-push';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -390,6 +392,20 @@ Only include numeric parameters. Return ONLY the JSON object.`,
   }
   obj._method = method;
 
+  // Whose report is this? A mismatch usually means the wrong person is selected.
+  const { rows: prow } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
+  const normName = (x) => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+  const pa = normName(obj.patient); const pb = normName(prow[0]?.name);
+  const mismatch = !!(pa.length && pb.length && !pa.some((t) => pb.includes(t)));
+  const force = String(req.query?.force || '') === '1';
+  if (mismatch && !force) {
+    return reply.code(200).send({
+      needs_confirm: true,
+      report_name: obj.patient, expected_name: prow[0]?.name,
+      message: `This report reads as ${obj.patient}, but you're uploading to ${prow[0]?.name}'s record.`,
+    });
+  }
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -624,7 +640,7 @@ app.get('/api/documents/:id/file', async (req, reply) => {
 
 // ── prescription scan: photo/PDF → medicines with reminders ─────
 app.post('/api/parents/:parentId/prescription', async (req, reply) => {
-  if (!(roleAtLeast(req.parentRole, 'admin') || req.parentRole === 'dependent')) {
+  if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent')) {
     return reply.code(403).send({ error: 'not allowed to add medicines' });
   }
   if (!ANTHROPIC_KEY) {
@@ -640,137 +656,112 @@ app.post('/api/parents/:parentId/prescription', async (req, reply) => {
     ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
     : { type: 'image', source: { type: 'base64', media_type: file.mimetype, data: b64 } };
 
-  const instruction = { type: 'text', text: `Read this doctor's prescription and return JSON ONLY (no markdown, no prose):
-{"doctor":"doctor name or empty","date":"YYYY-MM-DD or empty","medicines":[{"name":"medicine name","dosage":"e.g. 500mg","times":["HH:MM"],"notes":"e.g. after food","frequency":"daily"}]}
-Rules:
-- Indian prescriptions often write frequency as 1-0-1 (morning-afternoon-night). Convert: 1-0-0 → times ["08:00"]; 1-0-1 → ["08:00","21:00"]; 1-1-1 → ["08:00","14:00","21:00"]; 0-0-1 → ["21:00"].
-- Put instructions like "after food", "before food", "with milk" into notes.
-- If a medicine is weekly, set frequency "weekly" and note the day.
-- Only include medicines you can actually read. If the handwriting is unclear for a medicine, omit it rather than guessing.
-Return ONLY the JSON object.` };
+  // The hard-won rules, from a real prescription that went wrong:
+  // "Vertigo" (the diagnosis) and "Troponin I" (a test) were added as medicines.
+  const RX_PROMPT = `You are reading an Indian doctor's handwritten prescription. Extract ONLY what is actually there. Return STRICT JSON, nothing else:
 
-  let obj;
+{
+ "patient_name": "name after Mr/Mrs/Ms or null",
+ "doctor": "doctor or clinic name or null",
+ "rx_date": "YYYY-MM-DD or null",
+ "diagnosis": "the complaint/condition written at top (e.g. Vertigo, Fever) or null",
+ "complaints": ["symptoms noted, e.g. giddiness, sweating, vomiting"],
+ "vitals": {"bp": "e.g. 140/80 or null", "pulse": "e.g. 74 or null"},
+ "tests_advised": ["investigations ordered, e.g. ECG, Troponin I, X-ray"],
+ "medicines": [
+   {"name":"", "strength":"e.g. 16 mg or null", "form":"tablet|capsule|syrup|drops|injection|null",
+    "morning":true, "afternoon":false, "night":true,
+    "food_timing":"before|after|with|null",
+    "duration_days": 5,
+    "notes":"anything else written for THIS medicine or null"}
+ ]
+}
+
+CRITICAL RULES:
+1. "medicines" contains ONLY things a pharmacist can dispense — items marked Tab/T./Cap/Syp/Inj or clearly drug names. NEVER include: the diagnosis, symptoms, test names (ECG, Troponin, CBC, X-ray, MRI), advice (rest, fomentation, diet), or vitals. Those go in their own fields.
+2. Frequency notation: "1-0-1" means morning yes, afternoon no, night yes. "1-1-1" = all three. "0-0-1" = night only. "1/2" or "½" doses still count for that slot; put the half in notes.
+3. Food timing: A/C, ac, "before food" => "before". P/C, pc, "after food" => "after". If nothing written, null.
+4. Duration: "x 5 days", "× 1 week" => days as a number. "20" or "10" alone next to the name is usually the QUANTITY dispensed, NOT duration — leave duration null in that case.
+5. If handwriting is unreadable for a field, use null. Do not guess a drug name — write the closest letters you can read into "name" and add "unclear" in notes.
+6. Return JSON only. No markdown, no commentary.`;
+
   try {
-    const raw = await callClaude([docBlock, instruction], 2048);
-    obj = JSON.parse(raw.replace(/```json/g, '').replace(/```/g, '').trim());
-  } catch (e) {
-    return reply.code(200).send({ ok: false, error: 'Could not read that prescription clearly. Try a sharper photo, or add the medicines by hand.' });
-  }
-  const meds = Array.isArray(obj.medicines) ? obj.medicines : [];
-  if (!meds.length) {
-    return reply.code(200).send({ ok: false, error: 'No medicines could be read from that image. Try a sharper, well-lit photo.' });
-  }
-
-  const client = await pool.connect();
-  const created = [];
-  try {
-    await client.query('BEGIN');
-    // keep the prescription itself in the vault
-    const { rows: rep } = await client.query(
-      `INSERT INTO reports (parent_id, report_type, doctor_name, report_date, source_file, doc_kind, raw_extraction)
-       VALUES ($1,'Prescription',$2,$3,$4,'prescription',$5) RETURNING id`,
-      [req.params.parentId, obj.doctor || null, obj.date || localDateStr(), file.filename, JSON.stringify(obj)]);
-    try {
-      await fs.promises.mkdir(REPORTS_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(REPORTS_DIR, rep[0].id), buf);
-      await client.query('UPDATE reports SET has_file=true, file_name=$2, file_mime=$3 WHERE id=$1',
-        [rep[0].id, file.filename, file.mimetype]);
-    } catch { /* file storage is best-effort */ }
-
-    for (const m of meds) {
-      if (!m.name) continue;
-      const times = Array.isArray(m.times) && m.times.length ? m.times : ['08:00'];
-      const slots = { slot_morning: false, slot_afternoon: false, slot_night: false };
-      for (const t of times) {
-        const h = +String(t).split(':')[0];
-        if (h < 12) slots.slot_morning = true; else if (h < 17) slots.slot_afternoon = true; else slots.slot_night = true;
-      }
-      const { rows } = await client.query(
-        `INSERT INTO medications (parent_id, name, dosage, slot_morning, slot_afternoon, slot_night, notes, times, frequency)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, name, dosage, times, notes`,
-        [req.params.parentId, m.name, m.dosage || null, slots.slot_morning, slots.slot_afternoon,
-         slots.slot_night, m.notes || null, times, m.frequency || 'daily']);
-      created.push(rows[0]);
-    }
-    await client.query('COMMIT');
-  } catch (e) {
-    await client.query('ROLLBACK');
-    return reply.code(500).send({ error: e.message });
-  } finally { client.release(); }
-
-  return { ok: true, doctor: obj.doctor || null, date: obj.date || null, medicines: created };
-});
-
-// ── plain-English analysis of one report ────────────────────────
-// Deliberately NOT a diagnosis: it says what is outside range, how far,
-// and how promptly it's worth showing someone. It never names a condition.
-app.get('/api/reports/:id/analysis', async (req, reply) => {
-  const { rows: chk } = await pool.query(
-    `SELECT 1 FROM reports r JOIN family_members fm ON fm.parent_id=r.parent_id AND fm.user_id=$1
-     WHERE r.id=$2`, [req.user.id, req.params.id]);
-  if (!chk[0]) return reply.code(403).send({ error: 'no access' });
-
-  const rep = await fetchReportWithParams(req.params.id);
-  if (!rep) return reply.code(404).send({ error: 'not found' });
-  const ranges = await getRanges();
-
-  const flagged = [];
-  let unknown = 0;
-  for (const p of rep.params) {
-    const r = effectiveRange(ranges, p);
-    if (!r) { unknown++; continue; }
-    const status = statusFor(ranges, p);
-    if (status === 'ok' || status === 'unknown') continue;
-    // how far outside, as a multiple of the healthy band width
-    const width = (Number.isFinite(r.max) && Number.isFinite(r.min) && r.max > r.min) ? (r.max - r.min) : Math.abs(p.value) || 1;
-    const over = status === 'high' ? p.value - r.max : r.min - p.value;
-    const ratio = over / width;
-    const degree = ratio > 1.5 ? 'marked' : ratio > 0.4 ? 'notable' : 'slight';
-    flagged.push({
-      name: p.name, value: p.value, unit: p.unit || '',
-      status, degree, ratio: +ratio.toFixed(2),
-      range: { min: r.min, max: r.max, text: r.text },
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model: MODEL, max_tokens: 1500,
+        messages: [{ role: 'user', content: [docBlock, { type: 'text', text: RX_PROMPT }] }],
+      }),
     });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'extraction failed');
+    let text = (data.content || []).filter((c) => c.type === 'text').map((c) => c.text).join('');
+    text = text.replace(/```json|```/g, '').trim();
+    const rx = JSON.parse(text);
+
+    // store the digitised prescription (file + structure), but ADD NOTHING yet —
+    // the family reviews and confirms; software never medicates on its own
+    const { rows: rep } = await pool.query(
+      `INSERT INTO reports (parent_id, report_date, report_type, doctor_name, uploaded_by, has_file, doc_kind, rx_meta)
+       VALUES ($1, COALESCE($2::date, CURRENT_DATE), 'Prescription', $3, $4, true, 'prescription', $5)
+       RETURNING id`,
+      [req.params.parentId, rx.rx_date || null, rx.doctor || null, req.user.id,
+       JSON.stringify({ diagnosis: rx.diagnosis, complaints: rx.complaints || [],
+                        tests_advised: rx.tests_advised || [], vitals: rx.vitals || {},
+                        patient_name: rx.patient_name || null })]);
+    await fs.promises.mkdir(REPORT_DIR, { recursive: true });
+    await fs.promises.writeFile(path.join(REPORT_DIR, rep[0].id), buf);
+
+    // name check — the report may belong to someone else in the family
+    const { rows: pr } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
+    const norm = (x) => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
+    const a = norm(rx.patient_name); const b = norm(pr[0]?.name);
+    const name_mismatch = !!(a.length && b.length && !a.some((t) => b.includes(t)));
+
+    return { ok: true, review: true, prescription_id: rep[0].id,
+      patient_name: rx.patient_name || null, expected_name: pr[0]?.name || null, name_mismatch,
+      diagnosis: rx.diagnosis || null, complaints: rx.complaints || [],
+      tests_advised: rx.tests_advised || [], vitals: rx.vitals || {},
+      medicines: (rx.medicines || []).map((m) => ({
+        name: [m.form && m.form !== 'tablet' ? m.form : 'Tab', m.name].filter(Boolean).join(' ').replace(/^Tab Tab/i,'Tab'),
+        dosage: m.strength || null,
+        slot_morning: !!m.morning, slot_afternoon: !!m.afternoon, slot_night: !!m.night,
+        food_timing: ['before','after','with'].includes(m.food_timing) ? m.food_timing : null,
+        duration_days: m.duration_days || null, notes: m.notes || null,
+      })) };
+  } catch (e) {
+    app.log.error('prescription extract failed: ' + e.message);
+    return reply.code(200).send({ ok: false, error: 'Could not read that prescription clearly. Add the medicines by hand, or try a sharper photo.' });
   }
-  const order = { marked: 0, notable: 1, slight: 2 };
-  flagged.sort((a, b) => order[a.degree] - order[b.degree] || b.ratio - a.ratio);
-
-  const marked = flagged.filter((f) => f.degree === 'marked');
-  const notable = flagged.filter((f) => f.degree === 'notable');
-  const inRange = rep.params.length - flagged.length - unknown;
-
-  let level, headline, advice;
-  if (!flagged.length) {
-    level = 'good';
-    headline = 'Nothing in this report stands out.';
-    advice = 'Everything that could be checked sits inside its reference range. Worth keeping for the record.';
-  } else if (marked.length >= 2) {
-    level = 'urgent';
-    headline = `${flagged.length} value${flagged.length === 1 ? '' : 's'} are outside their range, and ${marked.length} of them by a wide margin.`;
-    advice = 'This is worth showing a doctor soon rather than waiting for the next routine visit. Take the original report with you.';
-  } else if (marked.length === 1) {
-    level = 'urgent';
-    headline = `${marked[0].name} is well outside its range, along with ${flagged.length - 1} other value${flagged.length - 1 === 1 ? '' : 's'}.`;
-    advice = 'Worth showing a doctor soon rather than waiting. Take the original report with you.';
-  } else if (notable.length) {
-    level = 'watch';
-    headline = `${flagged.length} value${flagged.length === 1 ? ' is' : 's are'} outside the normal range.`;
-    advice = 'Worth raising with the doctor — at the next visit if there are no symptoms, sooner if anything feels off.';
-  } else {
-    level = 'watch';
-    headline = `${flagged.length} value${flagged.length === 1 ? ' is' : 's are'} slightly outside the normal range.`;
-    advice = 'Mild differences are common and often not a concern on their own. Worth mentioning at the next visit.';
-  }
-
-  return {
-    level, headline, advice,
-    flagged, in_range: inRange, unreadable: unknown,
-    report: { id: rep.id, type: rep.report_type, date: rep.report_date, lab: rep.lab_name },
-    disclaimer: 'This is a plain reading of the numbers against the ranges printed on the report — not a diagnosis. Only a doctor can say what it means.',
-  };
 });
 
-// optional warm AI narrative over that analysis
+// The family reviewed the extraction — create exactly what they confirmed.
+app.post('/api/parents/:parentId/prescription/confirm', async (req, reply) => {
+  if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent')) {
+    return reply.code(403).send({ error: 'not allowed to add medicines' });
+  }
+  const { medicines } = req.body || {};
+  if (!Array.isArray(medicines) || !medicines.length) return reply.code(400).send({ error: 'no medicines to add' });
+  const added = [];
+  for (const m of medicines) {
+    if (!m.name) continue;
+    const times = [];
+    if (m.slot_morning) times.push('08:00');
+    if (m.slot_afternoon) times.push('14:00');
+    if (m.slot_night) times.push('21:00');
+    const { rows } = await pool.query(
+      `INSERT INTO medications (parent_id, name, dosage, slot_morning, slot_afternoon, slot_night, notes, times, frequency, food_timing, duration_days)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'daily',$9,$10) RETURNING id, name`,
+      [req.params.parentId, m.name, m.dosage || null, !!m.slot_morning, !!m.slot_afternoon, !!m.slot_night,
+       m.notes || null, times.length ? times : null,
+       ['before','after','with'].includes(m.food_timing) ? m.food_timing : null,
+       m.duration_days ? +m.duration_days : null]);
+    added.push(rows[0]);
+  }
+  return { ok: true, added };
+});
+
 app.post('/api/reports/:id/explain', async (req, reply) => {
   if (!ANTHROPIC_KEY) return reply.send({ summary: null, no_key: true });
   const { rows: chk } = await pool.query(
@@ -836,6 +827,54 @@ app.get('/api/messages/:id/media', async (req, reply) => {
   reply.header('Content-Type', rows[0].media_mime || 'application/octet-stream');
   return reply.send(fs.createReadStream(p));
 });
+
+// ── web push (PWA notifications) ──
+// Keys persist in data/ so subscriptions survive restarts. Set VAPID_PUBLIC/
+// VAPID_PRIVATE in .env to pin them explicitly.
+const VAPID_FILE = path.join(__dirname, '..', 'data', 'vapid.json');
+let VAPID = null;
+if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
+  VAPID = { publicKey: process.env.VAPID_PUBLIC, privateKey: process.env.VAPID_PRIVATE };
+} else if (fs.existsSync(VAPID_FILE)) {
+  VAPID = JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8'));
+} else {
+  VAPID = webpush.generateVAPIDKeys();
+  fs.mkdirSync(path.dirname(VAPID_FILE), { recursive: true });
+  fs.writeFileSync(VAPID_FILE, JSON.stringify(VAPID));
+}
+webpush.setVapidDetails('mailto:' + (process.env.NOTIFY_FROM || 'care@parentfirst.app'),
+  VAPID.publicKey, VAPID.privateKey);
+
+app.get('/api/push/vapid-key', async () => ({ key: VAPID.publicKey }));
+
+app.post('/api/push/subscribe', async (req, reply) => {
+  const sub = req.body;
+  if (!sub?.endpoint || !sub?.keys?.p256dh) return reply.code(400).send({ error: 'bad subscription' });
+  await pool.query(
+    `INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES ($1,$2,$3,$4)
+     ON CONFLICT (endpoint) DO UPDATE SET user_id=$1, p256dh=$3, auth=$4`,
+    [req.user.id, sub.endpoint, sub.keys.p256dh, sub.keys.auth]);
+  return { subscribed: true };
+});
+
+// used by alerts and the digest
+app.decorate('sendPush', async (userIds, title, body, url) => {
+  if (!userIds?.length) return;
+  const { rows } = await pool.query(
+    'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ANY($1::uuid[])', [userIds]);
+  const payload = JSON.stringify({ title, body, url: url || '/' });
+  for (const s of rows) {
+    try {
+      await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload);
+    } catch (e) {
+      if (e.statusCode === 404 || e.statusCode === 410) {
+        await pool.query('DELETE FROM push_subscriptions WHERE id=$1', [s.id]);
+      }
+    }
+  }
+});
+
+startDigest(app, pool);
 
 const port = +(process.env.PORT || 4500);
 app.listen({ port, host: '0.0.0.0' }).then(async () => {

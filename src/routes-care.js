@@ -16,11 +16,40 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
     return true;
   };
   // medicines: an admin, or the elder managing their own list
-  const canManageMeds = (role) => role === 'admin' || role === 'dependent';
+  // Any family member can manage medicines — a son-in-law shouldn't be blocked
+  // from adding what the doctor prescribed. Caregivers mark doses, not the list.
+  const canManageMeds = (role) => role === 'admin' || role === 'member' || role === 'dependent';
   const needMeds = (req, reply) => {
     if (!canManageMeds(req.parentRole)) { reply.code(403).send({ error: 'not allowed to change medicines' }); return false; }
     return true;
   };
+
+  // month calendar: for each day, how many scheduled doses were taken
+  app.get('/api/parents/:parentId/medications/calendar', async (req) => {
+    const month = String(req.query.month || '').match(/^\d{4}-\d{2}$/)
+      ? req.query.month : new Date().toISOString().slice(0, 7);
+    const first = month + '-01';
+    const { rows: meds } = await pool.query(
+      `SELECT id, slot_morning::int + slot_afternoon::int + slot_night::int AS slots, created_at::date AS since
+       FROM medications WHERE parent_id=$1 AND active=true`, [req.params.parentId]);
+    const { rows: logs } = await pool.query(
+      `SELECT log_date AS d, count(*)::int AS taken
+       FROM medication_log ml JOIN medications m ON m.id = ml.medication_id
+       WHERE m.parent_id=$1 AND ml.taken AND log_date >= $2::date
+         AND log_date < ($2::date + interval '1 month')
+       GROUP BY 1`, [req.params.parentId, first]);
+    const takenBy = {}; for (const l of logs) takenBy[l.d.toISOString().slice(0,10)] = l.taken;
+    const daysIn = new Date(+month.slice(0,4), +month.slice(5,7), 0).getDate();
+    const today = new Date().toISOString().slice(0,10);
+    const days = [];
+    for (let d = 1; d <= daysIn; d++) {
+      const iso = month + '-' + String(d).padStart(2, '0');
+      const due = meds.filter((m) => String(m.since.toISOString().slice(0,10)) <= iso)
+        .reduce((a, m) => a + (m.slots || 0), 0);
+      days.push({ date: iso, due, taken: takenBy[iso] || 0, future: iso > today });
+    }
+    return { month, days };
+  });
 
   // ────────────────────────── MEDICATIONS ──────────────────────────
   app.get('/api/parents/:parentId/medications', async (req) => {
@@ -34,16 +63,18 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
   app.post('/api/parents/:parentId/medications', async (req, reply) => {
     if (!needMeds(req, reply)) return;
     const { name, dosage, slot_morning, slot_afternoon, slot_night, notes,
-            days_of_week, times, frequency } = req.body || {};
+            days_of_week, times, frequency, food_timing, duration_days } = req.body || {};
     if (!name) return reply.code(400).send({ error: 'name required' });
     const { rows } = await pool.query(
       `INSERT INTO medications (parent_id, name, dosage, slot_morning, slot_afternoon, slot_night, notes,
-         days_of_week, times, frequency)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+         days_of_week, times, frequency, food_timing, duration_days)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [req.params.parentId, name, dosage || null, !!slot_morning, !!slot_afternoon, !!slot_night, notes || null,
        Array.isArray(days_of_week) && days_of_week.length ? days_of_week : null,
        Array.isArray(times) && times.length ? times : null,
-       frequency || 'daily'],
+       frequency || 'daily',
+       ['before','after','with','any'].includes(food_timing) ? food_timing : null,
+       duration_days ? +duration_days : null],
     );
     return rows[0];
   });
@@ -578,8 +609,8 @@ DETAILS: ${details || ''}`;
 
     // vitals drift — the "spot it before it becomes a crisis" bit
     const { rows: vrows } = await pool.query(
-      `SELECT taken_on, systolic, diastolic, sugar FROM vitals
-       WHERE parent_id=$1 AND taken_on > CURRENT_DATE - 21 ORDER BY taken_on DESC`, [pid]);
+      `SELECT taken_at, systolic, diastolic, sugar FROM vitals
+       WHERE parent_id=$1 AND taken_at > CURRENT_DATE - 21 ORDER BY taken_at DESC`, [pid]);
     if (vrows.length >= 2) {
       const highBP = vrows.filter((v) => v.systolic && (v.systolic > 140 || (v.diastolic || 0) > 90));
       if (highBP.length >= 2) {
@@ -693,7 +724,8 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
              blood_group=COALESCE($4,blood_group) WHERE id=$1`,
           [parent.id, profile.allergies || null, profile.conditions || null, profile.blood_group || null]);
       }
-      await client.query('UPDATE users SET onboarded=true WHERE id=$1', [req.user.id]);
+      await client.query('UPDATE users SET onboarded=true, signup_role=$2 WHERE id=$1',
+        [req.user.id, account_type === 'parent' ? 'parent' : 'carer']);
       await client.query('COMMIT');
       return { parent, account_type: account_type || 'carer', group_name: group_name || null };
     } catch (e) {
@@ -838,11 +870,12 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     if (!role) return reply.code(403).send({ error: 'no access' });
     if (!canManageMeds(role)) return reply.code(403).send({ error: 'not allowed to change medicines' });
     const { name, dosage, slot_morning, slot_afternoon, slot_night, notes,
-            days_of_week, times, frequency } = req.body || {};
+            days_of_week, times, frequency, food_timing } = req.body || {};
     if (!name) return reply.code(400).send({ error: 'name required' });
     const { rows } = await pool.query(
       `UPDATE medications SET name=$2, dosage=$3, slot_morning=$4, slot_afternoon=$5,
-         slot_night=$6, notes=$7, days_of_week=$8, times=$9, frequency=$10
+         slot_night=$6, notes=$7, days_of_week=$8, times=$9, frequency=$10,
+         food_timing=COALESCE($11, food_timing)
        WHERE id=$1 RETURNING *`,
       [req.params.id, name, dosage || null, !!slot_morning, !!slot_afternoon, !!slot_night,
        notes || null,
@@ -1030,9 +1063,9 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     const { rows } = await pool.query(
       `SELECT v.*, u.name AS by_name FROM vitals v
        LEFT JOIN users u ON u.id = v.logged_by
-       WHERE v.parent_id=$1 AND v.taken_on > CURRENT_DATE - $2::int
-       ORDER BY v.taken_on DESC, v.created_at DESC`, [req.params.parentId, days]);
-    const norm = rows.map((r) => ({ ...r, taken_on: localDate(r.taken_on) }));
+       WHERE v.parent_id=$1 AND v.taken_at > CURRENT_DATE - $2::int
+       ORDER BY v.taken_at DESC, v.created_at DESC`, [req.params.parentId, days]);
+    const norm = rows.map((r) => ({ ...r, taken_at: localDate(r.taken_at) }));
     // simple series for charting, oldest first
     const series = [...norm].reverse();
     const latest = norm[0] || null;
@@ -1040,9 +1073,9 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       latest,
       entries: norm,
       series: {
-        bp: series.filter((r) => r.systolic).map((r) => ({ date: r.taken_on, systolic: r.systolic, diastolic: r.diastolic })),
-        sugar: series.filter((r) => r.sugar).map((r) => ({ date: r.taken_on, value: r.sugar, type: r.sugar_type })),
-        weight: series.filter((r) => r.weight_kg).map((r) => ({ date: r.taken_on, value: +r.weight_kg })),
+        bp: series.filter((r) => r.systolic).map((r) => ({ date: r.taken_at, systolic: r.systolic, diastolic: r.diastolic })),
+        sugar: series.filter((r) => r.sugar).map((r) => ({ date: r.taken_at, value: r.sugar, type: r.sugar_type })),
+        weight: series.filter((r) => r.weight_kg).map((r) => ({ date: r.taken_at, value: +r.weight_kg })),
       },
       bands: VITAL_BANDS,
       can_edit: roleAtLeast(req.parentRole, 'member') || req.parentRole === 'caregiver',
@@ -1054,14 +1087,14 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'caregiver')) {
       return reply.code(403).send({ error: 'not allowed to record vitals' });
     }
-    const { taken_on, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes } = req.body || {};
+    const { taken_at, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes } = req.body || {};
     if (!systolic && !sugar && !weight_kg && !pulse) {
       return reply.code(400).send({ error: 'record at least one reading' });
     }
     const { rows } = await pool.query(
-      `INSERT INTO vitals (parent_id, taken_on, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes, logged_by)
+      `INSERT INTO vitals (parent_id, taken_at, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes, logged_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [req.params.parentId, taken_on || localDate(), taken_time || null,
+      [req.params.parentId, taken_at || localDate(), taken_time || null,
        systolic || null, diastolic || null, pulse || null,
        sugar || null, sugar_type || null, weight_kg || null, notes || null, req.user.id]);
     return rows[0];
@@ -1100,14 +1133,14 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
         detail: [a.with_whom, a.status].filter(Boolean).join(' · '), ref: a.id });
     }
     const { rows: vit } = await pool.query(
-      `SELECT * FROM vitals WHERE parent_id=$1 ORDER BY taken_on DESC LIMIT 40`, [pid]);
+      `SELECT * FROM vitals WHERE parent_id=$1 ORDER BY taken_at DESC LIMIT 40`, [pid]);
     for (const v of vit) {
       const bits = [];
       if (v.systolic) bits.push(`BP ${v.systolic}/${v.diastolic || '—'}`);
       if (v.sugar) bits.push(`sugar ${v.sugar}${v.sugar_type ? ' (' + v.sugar_type + ')' : ''}`);
       if (v.weight_kg) bits.push(`${v.weight_kg} kg`);
       if (v.pulse) bits.push(`pulse ${v.pulse}`);
-      items.push({ kind: 'vital', date: localDate(v.taken_on), title: bits.join(' · ') || 'Vitals', detail: v.taken_time || '', ref: v.id });
+      items.push({ kind: 'vital', date: localDate(v.taken_at), title: bits.join(' · ') || 'Vitals', detail: v.taken_time || '', ref: v.id });
     }
     const { rows: ci } = await pool.query(
       `SELECT * FROM checkins WHERE parent_id=$1 ORDER BY checkin_date DESC LIMIT 20`, [pid]);
@@ -1131,10 +1164,13 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     const { rows: pr2 } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
     // tell everyone who looks after this person
     const { rows: watchers } = await pool.query(
-      `SELECT DISTINCT u.email FROM family_members fm JOIN users u ON u.id = fm.user_id
+      `SELECT DISTINCT u.id, u.email FROM family_members fm JOIN users u ON u.id = fm.user_id
        WHERE fm.parent_id=$1 AND fm.role IN ('admin','member') AND u.id <> $2`,
       [req.params.parentId, req.user.id]);
     const isSos = (severity === 'sos');
+    // push reaches phones instantly — the email is the paper trail
+    try { app.sendPush(watchers.map((w) => w.id),
+      `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'family'}`, message, '/'); } catch {}
     notifyPeople(app, watchers.map((w) => w.email),
       `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'a family member'}`, [
         `${message}`,

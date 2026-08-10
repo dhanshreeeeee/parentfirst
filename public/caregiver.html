@@ -182,7 +182,10 @@ async function boot(){
   ME = await api('/api/me');
   if(!ME.parents.length){ document.getElementById('cgName').textContent='No parent assigned yet'; showApp(); return; }
   // caregivers usually have one parent; pick the first
-  PARENT = ME.parents[0];
+  // the caregiver is here for the person they look after — never their own row
+  PARENT = ME.parents.find(p => p.role !== 'admin' && p.name !== ME.user.name)
+        || ME.parents.find(p => p.name !== ME.user.name)
+        || ME.parents[0];
   const first = PARENT.name.split(' ')[0];
   document.getElementById('cgName').textContent = ME.user.name+' · caring for '+PARENT.name;
   document.querySelectorAll('.pname2').forEach(el=>el.textContent=first);

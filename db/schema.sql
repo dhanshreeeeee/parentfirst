@@ -611,3 +611,53 @@ CREATE INDEX IF NOT EXISTS idx_hm_user ON household_members(user_id);
 ALTER TABLE parents ADD COLUMN IF NOT EXISTS household_id UUID REFERENCES households(id) ON DELETE SET NULL;
 CREATE INDEX IF NOT EXISTS idx_parents_household ON parents(household_id);
 ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_role TEXT;
+
+-- when to take it relative to food — the detail families actually argue about
+ALTER TABLE medications ADD COLUMN IF NOT EXISTS food_timing   TEXT;   -- 'before' | 'after' | 'with' | 'any'
+ALTER TABLE medications ADD COLUMN IF NOT EXISTS duration_days INT;
+
+-- a digitised prescription keeps the doctor's full picture, not just the pills
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS rx_meta JSONB;
+-- rx_meta: { diagnosis, complaints[], tests_advised[], vitals:{bp,pulse}, doctor, clinic }
+
+-- community: simple shared events for the household (satsang, walk, health camp)
+CREATE TABLE IF NOT EXISTS events (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  title        TEXT NOT NULL,
+  event_date   DATE NOT NULL,
+  event_time   TEXT,
+  place        TEXT,
+  notes        TEXT,
+  created_by   UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_events_household ON events(household_id, event_date);
+
+-- email ownership is now proven with a 6-digit code
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false;
+-- everyone who already exists keeps working
+UPDATE users SET verified = true WHERE verified = false;
+
+CREATE TABLE IF NOT EXISTS email_otps (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email      TEXT NOT NULL,
+  code       TEXT NOT NULL,
+  purpose    TEXT NOT NULL,              -- 'verify' | 'reset'
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts   INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_otps_email ON email_otps(email, purpose);
+
+-- browser push subscriptions (PWA notifications)
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  endpoint   TEXT NOT NULL UNIQUE,
+  p256dh     TEXT NOT NULL,
+  auth       TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);

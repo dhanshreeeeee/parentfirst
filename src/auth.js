@@ -80,6 +80,7 @@ async function authPluginImpl(app, { pool }) {
       url === '/api/health' ||
       url.startsWith('/api/auth/') ||
       url.startsWith('/api/households/peek/') ||
+      url === '/api/push/vapid-key' ||
       url === '/api/activities';
 
     // resolve user from cookie (if any)
@@ -117,11 +118,94 @@ async function authPluginImpl(app, { pool }) {
     const exists = await pool.query('SELECT 1 FROM users WHERE email=$1', [email.toLowerCase()]);
     if (exists.rows[0]) return reply.code(409).send({ error: 'an account with this email already exists' });
     const { rows } = await pool.query(
-      'INSERT INTO users (email, name, password_hash) VALUES ($1,$2,$3) RETURNING id, email, name',
+      'INSERT INTO users (email, name, password_hash, verified) VALUES ($1,$2,$3,false) RETURNING id, email, name',
       [email.toLowerCase(), name, hashPassword(password)]);
-    const token = await createSession(pool, rows[0].id);
-    setCookie(reply, token);
-    return { user: { ...rows[0], onboarded: false }, account_type: account_type || 'owner' };
+    try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
+    return { needs_verify: true, email: rows[0].email };
+  });
+
+  // ── email OTP: prove the address is theirs ──
+  const OTP_TTL_MIN = 10;
+  const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
+
+  async function sendOtp(email, purpose) {
+    const code = genCode();
+    await pool.query('DELETE FROM email_otps WHERE email=$1 AND purpose=$2', [email, purpose]);
+    await pool.query(
+      `INSERT INTO email_otps (email, code, purpose, expires_at)
+       VALUES ($1,$2,$3, now() + interval '${OTP_TTL_MIN} minutes')`, [email, code, purpose]);
+    const subject = purpose === 'reset' ? 'Your password reset code' : 'Confirm your email';
+    const { notifyPeople } = await import('./notify.js');
+    await notifyPeople(app, [email], subject, [
+      `Your ParentFirst code is: ${code}`,
+      '',
+      `It works for ${OTP_TTL_MIN} minutes. If you didn't ask for this, ignore it.`,
+    ]);
+  }
+
+  async function checkOtp(email, purpose, code) {
+    const { rows } = await pool.query(
+      'SELECT * FROM email_otps WHERE email=$1 AND purpose=$2 ORDER BY created_at DESC LIMIT 1',
+      [email, purpose]);
+    const otp = rows[0];
+    if (!otp) return { ok: false, error: 'No code was requested. Ask for a new one.' };
+    if (new Date(otp.expires_at) < new Date()) return { ok: false, error: 'That code has expired. Ask for a new one.' };
+    if (otp.attempts >= 5) return { ok: false, error: 'Too many wrong tries. Ask for a new code.' };
+    if (otp.code !== String(code).trim()) {
+      await pool.query('UPDATE email_otps SET attempts=attempts+1 WHERE id=$1', [otp.id]);
+      return { ok: false, error: 'That code is not right.' };
+    }
+    await pool.query('DELETE FROM email_otps WHERE id=$1', [otp.id]);
+    return { ok: true };
+  }
+
+  // verify a fresh signup
+  app.post('/api/auth/verify', {
+    config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
+    const { email, code } = req.body || {};
+    if (!email || !code) return reply.code(400).send({ error: 'email and code required' });
+    const r = await checkOtp(email.toLowerCase(), 'verify', code);
+    if (!r.ok) return reply.code(400).send({ error: r.error });
+    await pool.query('UPDATE users SET verified=true WHERE email=$1', [email.toLowerCase()]);
+    return { verified: true };
+  });
+
+  app.post('/api/auth/resend', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
+    const { email, purpose } = req.body || {};
+    if (!email) return reply.code(400).send({ error: 'email required' });
+    const { rows } = await pool.query('SELECT verified FROM users WHERE email=$1', [email.toLowerCase()]);
+    if (!rows[0]) return { sent: true };   // don't reveal which emails exist
+    if (purpose !== 'reset' && rows[0].verified) return { sent: true };
+    await sendOtp(email.toLowerCase(), purpose === 'reset' ? 'reset' : 'verify');
+    return { sent: true };
+  });
+
+  // forgot password → OTP → set a new one
+  app.post('/api/auth/forgot', {
+    config: { rateLimit: { max: 5, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
+    const { email } = req.body || {};
+    if (!email) return reply.code(400).send({ error: 'email required' });
+    const { rows } = await pool.query('SELECT 1 FROM users WHERE email=$1', [email.toLowerCase()]);
+    if (rows[0]) await sendOtp(email.toLowerCase(), 'reset');
+    return { sent: true };   // same answer either way
+  });
+
+  app.post('/api/auth/reset', {
+    config: { rateLimit: { max: 10, timeWindow: '10 minutes' } },
+  }, async (req, reply) => {
+    const { email, code, new_password } = req.body || {};
+    if (!email || !code || !new_password) return reply.code(400).send({ error: 'email, code and new password required' });
+    if (new_password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' });
+    const r = await checkOtp(email.toLowerCase(), 'reset', code);
+    if (!r.ok) return reply.code(400).send({ error: r.error });
+    await pool.query('UPDATE users SET password_hash=$2, verified=true WHERE email=$1',
+      [email.toLowerCase(), hashPassword(new_password)]);
+    await pool.query('DELETE FROM sessions WHERE user_id=(SELECT id FROM users WHERE email=$1)', [email.toLowerCase()]);
+    return { reset: true };
   });
 
   // ── login ──
@@ -131,6 +215,14 @@ async function authPluginImpl(app, { pool }) {
     const { email, password } = req.body || {};
     if (!email || !password) return reply.code(400).send({ error: 'email and password required' });
     const { rows } = await pool.query('SELECT * FROM users WHERE email=$1', [email.toLowerCase()]);
+    if (rows[0] && !rows[0].verified) {
+      // right password or not, the address isn't proven yet
+      if (verifyPassword(password, rows[0].password_hash)) {
+        try { await sendOtp(email.toLowerCase(), 'verify'); } catch { /* ignore */ }
+        return reply.code(403).send({ needs_verify: true, email: email.toLowerCase(),
+          error: 'Confirm your email first — we\'ve sent you a fresh code.' });
+      }
+    }
     const u = rows[0];
     if (!u || !verifyPassword(password, u.password_hash)) {
       return reply.code(401).send({ error: 'invalid email or password' });
