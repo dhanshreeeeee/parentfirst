@@ -51,6 +51,69 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
     return { month, days };
   });
 
+  // ── stroke & heart risk-factor awareness ──
+  // Deliberately NOT a prediction. We surface which established risk factors
+  // are present in data the family already keeps, with plain guidance.
+  // Thresholds follow standard clinical guidance (BP ≥140/90 sustained,
+  // fasting sugar ≥126 / random ≥200, BMI ≥30, age ≥65, smoking, and
+  // hypertension / diabetes / heart conditions on record).
+  // Informed by Harsheeta's factor analysis on the Kaggle stroke dataset,
+  // which ranks these same factors — used here as evidence, not as a model.
+  app.get('/api/parents/:parentId/risk-awareness', async (req) => {
+    const pid = req.params.parentId;
+    const { rows: pr } = await pool.query(
+      `SELECT p.age, p.conditions, cp.smoking, cp.height_cm, cp.weight_kg
+       FROM parents p LEFT JOIN care_profiles cp ON cp.parent_id = p.id WHERE p.id=$1`, [pid]);
+    if (!pr[0]) return { factors: [] };
+    const P = pr[0];
+    const cond = String(P.conditions || '').toLowerCase();
+
+    // last 30 days of readings — sustained numbers, not one bad afternoon
+    const { rows: v } = await pool.query(
+      `SELECT round(avg(systolic)) AS sys, round(avg(diastolic)) AS dia,
+              round(avg(sugar)) AS sugar, count(systolic)::int AS bp_n, count(sugar)::int AS sugar_n
+       FROM vitals WHERE parent_id=$1 AND taken_on > CURRENT_DATE - 30`, [pid]);
+    const V = v[0] || {};
+
+    const factors = [];
+    const add = (id, present, label, detail) => factors.push({ id, present: !!present, label, detail });
+
+    add('age', P.age >= 65, 'Age 65+',
+      P.age ? `${P.age} years — risk rises with age; the other factors below matter more because of it.` : 'Age not on record.');
+
+    const bpHigh = V.bp_n >= 3 && V.sys >= 140 && V.dia >= 90;
+    const bpKnown = /hypertension|high bp|blood pressure/.test(cond);
+    add('bp', bpHigh || bpKnown, 'High blood pressure',
+      bpHigh ? `Averaging ${V.sys}/${V.dia} over the last 30 days (${V.bp_n} readings).`
+             : bpKnown ? 'Hypertension is on the conditions list.'
+             : V.bp_n >= 3 ? `Averaging ${V.sys}/${V.dia} — in range.` : 'Fewer than 3 BP readings this month — log a few to know.');
+
+    const sugarHigh = V.sugar_n >= 3 && V.sugar >= 160;
+    const diabetic = /diabet|sugar/.test(cond);
+    add('sugar', sugarHigh || diabetic, 'Diabetes / high sugar',
+      sugarHigh ? `Sugar averaging ${V.sugar} over the last 30 days (${V.sugar_n} readings).`
+                : diabetic ? 'Diabetes is on the conditions list.'
+                : V.sugar_n >= 3 ? `Averaging ${V.sugar} — in range.` : 'Fewer than 3 sugar readings this month.');
+
+    add('heart', /heart|cardiac|afib|atrial|coronary/.test(cond), 'Heart condition',
+      /heart|cardiac|afib|atrial|coronary/.test(cond) ? 'A heart condition is on record — a known stroke risk factor.' : 'None on record.');
+
+    add('smoking', P.smoking === 'current', 'Smoking',
+      P.smoking === 'current' ? 'Currently smoking — the most changeable factor on this list.'
+        : P.smoking === 'former' ? 'Former smoker — risk falls the longer it stays quit.' : 'Non-smoker.');
+
+    let bmi = null;
+    if (P.height_cm && P.weight_kg) bmi = +(P.weight_kg / ((P.height_cm / 100) ** 2)).toFixed(1);
+    add('bmi', bmi && bmi >= 30, 'BMI 30+',
+      bmi ? `BMI ${bmi}.` : 'Height/weight not on the profile.');
+
+    const present = factors.filter((f) => f.present).length;
+    return {
+      factors, present, total: factors.length,
+      note: 'This is awareness, not a diagnosis or a prediction. Bring it to the next doctor visit.',
+    };
+  });
+
   // ────────────────────────── MEDICATIONS ──────────────────────────
   app.get('/api/parents/:parentId/medications', async (req) => {
     const { rows } = await pool.query(
@@ -609,8 +672,8 @@ DETAILS: ${details || ''}`;
 
     // vitals drift — the "spot it before it becomes a crisis" bit
     const { rows: vrows } = await pool.query(
-      `SELECT taken_at, systolic, diastolic, sugar FROM vitals
-       WHERE parent_id=$1 AND taken_at > CURRENT_DATE - 21 ORDER BY taken_at DESC`, [pid]);
+      `SELECT taken_on, systolic, diastolic, sugar FROM vitals
+       WHERE parent_id=$1 AND taken_on > CURRENT_DATE - 21 ORDER BY taken_on DESC`, [pid]);
     if (vrows.length >= 2) {
       const highBP = vrows.filter((v) => v.systolic && (v.systolic > 140 || (v.diastolic || 0) > 90));
       if (highBP.length >= 2) {
@@ -1063,9 +1126,9 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     const { rows } = await pool.query(
       `SELECT v.*, u.name AS by_name FROM vitals v
        LEFT JOIN users u ON u.id = v.logged_by
-       WHERE v.parent_id=$1 AND v.taken_at > CURRENT_DATE - $2::int
-       ORDER BY v.taken_at DESC, v.created_at DESC`, [req.params.parentId, days]);
-    const norm = rows.map((r) => ({ ...r, taken_at: localDate(r.taken_at) }));
+       WHERE v.parent_id=$1 AND v.taken_on > CURRENT_DATE - $2::int
+       ORDER BY v.taken_on DESC, v.created_at DESC`, [req.params.parentId, days]);
+    const norm = rows.map((r) => ({ ...r, taken_on: localDate(r.taken_on) }));
     // simple series for charting, oldest first
     const series = [...norm].reverse();
     const latest = norm[0] || null;
@@ -1073,9 +1136,9 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       latest,
       entries: norm,
       series: {
-        bp: series.filter((r) => r.systolic).map((r) => ({ date: r.taken_at, systolic: r.systolic, diastolic: r.diastolic })),
-        sugar: series.filter((r) => r.sugar).map((r) => ({ date: r.taken_at, value: r.sugar, type: r.sugar_type })),
-        weight: series.filter((r) => r.weight_kg).map((r) => ({ date: r.taken_at, value: +r.weight_kg })),
+        bp: series.filter((r) => r.systolic).map((r) => ({ date: r.taken_on, systolic: r.systolic, diastolic: r.diastolic })),
+        sugar: series.filter((r) => r.sugar).map((r) => ({ date: r.taken_on, value: r.sugar, type: r.sugar_type })),
+        weight: series.filter((r) => r.weight_kg).map((r) => ({ date: r.taken_on, value: +r.weight_kg })),
       },
       bands: VITAL_BANDS,
       can_edit: roleAtLeast(req.parentRole, 'member') || req.parentRole === 'caregiver',
@@ -1087,14 +1150,14 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'caregiver')) {
       return reply.code(403).send({ error: 'not allowed to record vitals' });
     }
-    const { taken_at, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes } = req.body || {};
+    const { taken_on, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes } = req.body || {};
     if (!systolic && !sugar && !weight_kg && !pulse) {
       return reply.code(400).send({ error: 'record at least one reading' });
     }
     const { rows } = await pool.query(
-      `INSERT INTO vitals (parent_id, taken_at, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes, logged_by)
+      `INSERT INTO vitals (parent_id, taken_on, taken_time, systolic, diastolic, pulse, sugar, sugar_type, weight_kg, notes, logged_by)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-      [req.params.parentId, taken_at || localDate(), taken_time || null,
+      [req.params.parentId, taken_on || localDate(), taken_time || null,
        systolic || null, diastolic || null, pulse || null,
        sugar || null, sugar_type || null, weight_kg || null, notes || null, req.user.id]);
     return rows[0];
@@ -1133,14 +1196,14 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
         detail: [a.with_whom, a.status].filter(Boolean).join(' · '), ref: a.id });
     }
     const { rows: vit } = await pool.query(
-      `SELECT * FROM vitals WHERE parent_id=$1 ORDER BY taken_at DESC LIMIT 40`, [pid]);
+      `SELECT * FROM vitals WHERE parent_id=$1 ORDER BY taken_on DESC LIMIT 40`, [pid]);
     for (const v of vit) {
       const bits = [];
       if (v.systolic) bits.push(`BP ${v.systolic}/${v.diastolic || '—'}`);
       if (v.sugar) bits.push(`sugar ${v.sugar}${v.sugar_type ? ' (' + v.sugar_type + ')' : ''}`);
       if (v.weight_kg) bits.push(`${v.weight_kg} kg`);
       if (v.pulse) bits.push(`pulse ${v.pulse}`);
-      items.push({ kind: 'vital', date: localDate(v.taken_at), title: bits.join(' · ') || 'Vitals', detail: v.taken_time || '', ref: v.id });
+      items.push({ kind: 'vital', date: localDate(v.taken_on), title: bits.join(' · ') || 'Vitals', detail: v.taken_time || '', ref: v.id });
     }
     const { rows: ci } = await pool.query(
       `SELECT * FROM checkins WHERE parent_id=$1 ORDER BY checkin_date DESC LIMIT 20`, [pid]);

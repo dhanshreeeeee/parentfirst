@@ -714,6 +714,7 @@
       <div class="page-eyebrow">Health Trends</div>
       <h1 class="pt">Every value, <em>over time</em></h1>
       <p class="psub">The green band is the healthy range.</p>
+      <div id="riskCard"></div>
       <div class="trend-grid" id="trendGrid"></div>
     </div>
     <div class="view" id="view-chat">
@@ -1509,7 +1510,7 @@ function nav_(v){
   document.querySelectorAll('.side-btn[data-v]').forEach(b=>b.classList.remove('active'));
   const btn=document.querySelector('.side-btn[data-v="'+v+'"]'); if(btn)btn.classList.add('active');
   if(v==='compare')buildCompare();
-  if(v==='trends')buildTrends();
+  if(v==='trends'){buildTrends();loadRiskCard();}
   if(v==='meds'){loadMeds();loadMedCal();}
   if(v==='daily')loadDaily();
   if(v==='emergency')loadEmergency();
@@ -3381,6 +3382,26 @@ function showRxProgress(){
 function hideRxProgress(){
   clearInterval(RXP_TIMER); RXP_TIMER=null;
   const el=document.getElementById('rxProgress'); if(el) el.remove();
+}
+
+
+// ═══════════ RISK-FACTOR AWARENESS ═══════════
+// Named factors from the family's own data — never a percentage.
+async function loadRiskCard(){
+  const host=document.getElementById('riskCard'); if(!host) return;
+  let d;
+  try{ d = await j('/api/parents/'+PARENT.id+'/risk-awareness'); }catch(e){ host.innerHTML=''; return; }
+  if(!d.factors || !d.factors.length){ host.innerHTML=''; return; }
+  host.innerHTML =
+    '<div class="risk-card">'
+    + '<div class="risk-head"><div><div class="risk-title">Stroke &amp; heart — risk factors present</div>'
+    + '<div class="risk-count">'+d.present+' of '+d.total+'</div></div></div>'
+    + '<div class="risk-rows">'
+    + d.factors.map(f=>'<div class="risk-row'+(f.present?' on':'')+'">'
+        + '<span class="risk-dot">'+(f.present?'●':'○')+'</span>'
+        + '<div><div class="risk-l">'+esc(f.label)+'</div><div class="risk-d">'+esc(f.detail)+'</div></div></div>').join('')
+    + '</div>'
+    + '<div class="risk-note">'+esc(d.note)+'</div></div>';
 }
 
 init();

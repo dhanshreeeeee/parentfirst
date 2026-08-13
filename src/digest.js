@@ -79,7 +79,7 @@ async function digestFor(app, pool, elder, slot, today) {
   // latest vital today
   const { rows: vt } = await pool.query(
     `SELECT systolic, diastolic, sugar, pulse FROM vitals
-     WHERE parent_id=$1 AND recorded_at::date=$2::date ORDER BY recorded_at DESC LIMIT 1`,
+     WHERE parent_id=$1 AND taken_on=$2::date ORDER BY id DESC LIMIT 1`,
     [elder.id, today]);
   if (vt[0]) {
     const bits = [];
