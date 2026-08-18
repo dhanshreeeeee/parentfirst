@@ -16,6 +16,7 @@ import { extractLocal } from './extract-local.js';
 import careRoutes from './routes-care.js';
 import householdRoutes from './routes-household.js';
 import { startDigest } from './digest.js';
+import { startCareLoop } from './care_loop.js';
 import webpush from 'web-push';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
@@ -875,6 +876,7 @@ app.decorate('sendPush', async (userIds, title, body, url) => {
 });
 
 startDigest(app, pool);
+startCareLoop(app, pool);
 
 const port = +(process.env.PORT || 4500);
 app.listen({ port, host: '0.0.0.0' }).then(async () => {

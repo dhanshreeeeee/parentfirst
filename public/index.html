@@ -621,6 +621,39 @@
 
   /* ── forgot password link ── */
   .auth-forgot{ background:none; border:none; color:var(--ink-faint); font-size:12.5px; text-decoration:underline; cursor:pointer; display:block; margin:0.6rem auto 0; }
+  /* ── Today: status strip / attention / checklist ── */
+  .strip{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:1.2rem; }
+  .strip-card{ display:flex; align-items:center; gap:9px; background:var(--white); border:1.5px solid var(--border); border-radius:14px; padding:10px 16px; cursor:pointer; font-size:13.5px; transition:all .15s; }
+  .strip-card:hover{ transform:translateY(-1px); }
+  .strip-card.ok{ border-color:var(--sage); }
+  .strip-card.warn{ border-color:var(--gold); background:var(--gold-light); }
+  .strip-dot{ width:9px; height:9px; border-radius:50%; background:var(--sage); }
+  .strip-card.warn .strip-dot{ background:var(--gold); }
+  .strip-name{ font-weight:700; }
+  .strip-meta{ color:var(--ink-muted); font-size:12.5px; }
+  .attn{ margin-bottom:1.4rem; }
+  .attn-row{ display:flex; align-items:center; justify-content:space-between; gap:12px; background:var(--gold-light); border:1px solid rgba(184,134,11,0.35); border-radius:12px; padding:0.85rem 1.1rem; margin-bottom:0.55rem; }
+  .attn-row.sos{ background:var(--red-light); border-color:var(--red); }
+  .attn-msg{ font-size:13.5px; line-height:1.5; }
+  .btn-sm-out{ background:var(--white); border:1.5px solid var(--border-strong); border-radius:9px; padding:6px 13px; font-size:12.5px; cursor:pointer; white-space:nowrap; }
+  .checklist{ background:var(--white); border:1.5px dashed var(--border-strong); border-radius:var(--r-lg); padding:1rem 1.2rem; margin-bottom:1.3rem; }
+  .chk-title{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--ink-faint); margin-bottom:0.6rem; }
+  .chk-row{ display:flex; align-items:center; gap:10px; background:transparent; border:none; font-size:14px; padding:6px 2px; cursor:pointer; width:100%; text-align:left; }
+  .chk-row.done{ color:var(--ink-faint); text-decoration:line-through; cursor:default; }
+  .chk-tick{ color:var(--sage); font-weight:700; width:18px; }
+  /* ── vault tabs ── */
+  .vtabs{ display:flex; gap:6px; margin:0.7rem 0 1.2rem; border-bottom:1.5px solid var(--border); }
+  .vtab{ background:none; border:none; padding:8px 14px 10px; font-size:13.5px; color:var(--ink-muted); cursor:pointer; border-bottom:2.5px solid transparent; margin-bottom:-1.5px; }
+  .vtab.on{ color:var(--ink); font-weight:700; border-bottom-color:var(--rust); }
+  /* ── elder warmth cards ── */
+  .warm-card{ background:var(--white); border:1px solid var(--border); border-left:4px solid var(--rust); border-radius:var(--r-lg); padding:1rem 1.2rem; margin-bottom:0.8rem; }
+  .warm-k{ font-size:12.5px; font-weight:700; color:var(--ink-muted); margin-bottom:3px; }
+  .warm-v{ font-size:15.5px; line-height:1.5; }
+  .dependent-mode .warm-v{ font-size:18px; }
+
+  .det-cell{ background:var(--white); border:1px solid var(--border); border-radius:12px; padding:0.8rem 1rem; }
+  .attn-act{ flex-shrink:0; }
+  .btn-sm{ background:var(--ink); color:#fff; border:none; padding:8px 16px; border-radius:10px; font-size:13px; cursor:pointer; }
 </style>
 </head>
 <body>
@@ -691,37 +724,26 @@
 </div>
 <div class="layout">
   <aside class="side">
-    <div class="side-sec">Health</div>
+    <div class="side-sec dep-only">My space</div>
     <button class="side-btn dep-only" data-v="me" onclick="nav_('me')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> My Day</button>
-    <button class="side-btn active fam-only" data-v="monitor" onclick="nav_('monitor')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Parent Monitor</button>
-    <button class="side-btn" data-v="messages" onclick="nav_('messages')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg> Messages <span class="side-badge" id="msgBadge"></span></button>
-    <button class="side-btn" data-v="vault" onclick="nav_('vault')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Report Vault <span class="side-badge" id="vaultCount">0</span></button>
-    <button class="side-btn" data-v="compare" onclick="nav_('compare')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> Compare Reports</button>
-    <button class="side-btn" data-v="vitals" onclick="nav_('vitals')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Vitals</button>
-    <button class="side-btn" data-v="timeline" onclick="nav_('timeline')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="12" y1="2" x2="12" y2="22"/><circle cx="12" cy="7" r="2"/><circle cx="12" cy="17" r="2"/></svg> Medical Timeline</button>
-    <button class="side-btn" data-v="trends" onclick="nav_('trends')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Health Trends</button>
-    <button class="side-btn" data-v="chat" onclick="nav_('chat')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Ask AI</button>
-    <button class="side-btn" data-v="appts" onclick="nav_('appts')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg> Appointments <span class="side-badge" id="apptBadge"></span></button>
-    <div class="side-sec">Care</div>
-    <button class="side-btn" data-v="getcare" onclick="nav_('getcare')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Get Care</button>
-    <button class="side-btn" data-v="meds" onclick="nav_('meds')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M10.5 20.5 3.5 13.5a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7z"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/></svg> Medications <span class="side-badge" id="medsBadge"></span></button>
-    <button class="side-btn" data-v="daily" onclick="nav_('daily')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 21.35 10.55 20C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54z"/></svg> Daily Care & Family</button>
-    <button class="side-btn" data-v="emergency" onclick="nav_('emergency')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Emergency Card</button>
-    <button class="side-btn" data-v="team" onclick="nav_('team')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/></svg> Care Team</button>
-    <button class="side-btn" data-v="wellness" onclick="nav_('wellness')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg> Food &amp; Wellness</button>
-    <button class="side-btn" data-v="activities" onclick="nav_('activities')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Activities &amp; Wellness</button>
-    <div class="side-sec">Manage</div>
-    <button class="side-btn" data-v="community" onclick="nav_('community')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> Community</button>
-    <button class="side-btn" data-v="family" onclick="nav_('family')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Family Group</button>
-    <button class="side-btn" data-v="ops" data-req="admin" onclick="nav_('ops')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg> Requests <span class="side-badge" id="opsBadge"></span></button>
-    <button class="side-btn" data-v="details" onclick="nav_('details')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Details &amp; Profile</button>
-    <button class="side-btn" data-v="docs" onclick="nav_('docs')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg> Documents</button>
+    <button class="side-btn dep-only" data-v="messages" onclick="nav_('messages')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg> My Family</button>
+    <button class="side-btn dep-only" data-v="community" onclick="nav_('community')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg> Community</button>
+    <button class="side-btn dep-only" data-v="emergency" onclick="nav_('emergency')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Help</button>
+    <div class="side-sec fam-only">Care</div>
+    <button class="side-btn fam-only" data-v="monitor" onclick="nav_('monitor')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Today <span class="side-badge" id="opsBadge"></span></button>
+    <button class="side-btn fam-only" data-v="meds" onclick="nav_('meds')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M10.5 20.5 3.5 13.5a5 5 0 0 1 7-7l7 7a5 5 0 0 1-7 7z"/><line x1="8.5" y1="8.5" x2="15.5" y2="15.5"/></svg> Medicines <span class="side-badge" id="medsBadge"></span></button>
+    <button class="side-btn fam-only" data-v="vault" onclick="nav_('vault')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> Vault <span class="side-badge" id="vaultCount">0</span></button>
+    <button class="side-btn fam-only" data-v="vitals" onclick="nav_('vitals')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Vitals</button>
+    <button class="side-btn fam-only" data-v="messages" onclick="nav_('messages')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg> Messages <span class="side-badge" id="msgBadge"></span></button>
+    <button class="side-btn fam-only" data-v="emergency" onclick="nav_('emergency')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> Emergency</button>
+    <button class="side-btn fam-only" data-v="family" onclick="nav_('family')"><svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> Family</button>
   </aside>
   <main class="main">
     <!-- PARENT MONITOR -->
     <div id="famPrompt" style="display:none;"></div>
     <div class="view active" id="view-monitor">
-      <div class="page-eyebrow">Parent Monitor</div>
+      <div class="page-eyebrow">Today</div>
+      <div style="float:right;"><button class="btn-out" onclick="doctorSummary()">🖨 Doctor summary</button></div>
       <h1 class="pt" id="monTitle">How is <em>everyone?</em></h1>
       <p class="psub">Everything at a glance — today's mood, medicines, vitals, and care team. Your morning-chai check-in.</p>
       <div id="monitorBody"></div>
@@ -729,6 +751,7 @@
 
     <div class="view" id="view-vault">
       <div class="page-eyebrow">Report Vault</div>
+      <div class="vtab-host" data-tab="vault"></div>
       <h1 class="pt">Papa's medical life, <em>all in one place</em></h1>
       <p class="psub">Every report, organised by date. Upload a PDF or photo and AI extracts every value into the database automatically.</p>
       <div class="score-row" id="scoreRow"></div>
@@ -744,6 +767,7 @@
     </div>
     <div class="view" id="view-compare">
       <div class="page-eyebrow">Comparison Engine</div>
+      <div class="vtab-host" data-tab="compare"></div>
       <h1 class="pt">What <em>changed</em> between two reports</h1>
       <p class="psub">Pick two reports. Every parameter's change, direction, and range status - computed by the server.</p>
       <div class="cmp-picker">
@@ -803,6 +827,7 @@
     <!-- MEDICAL TIMELINE -->
     <div class="view" id="view-timeline">
       <div class="page-eyebrow">Medical Timeline</div>
+      <div class="vtab-host" data-tab="timeline"></div>
       <h1 class="pt">The whole story, <em>in order</em></h1>
       <p class="psub">Every prescription, report, visit, vital and check-in on one thread — so the next doctor sees it all in seconds.</p>
       <div class="chip-row" id="tlFilters" style="margin-bottom:1.5rem;"></div>
@@ -849,6 +874,7 @@
 
     <!-- MY DAY (dependent's own home) -->
     <div class="view" id="view-me">
+      <div id="warmth"></div>
       <div class="page-eyebrow">My Day</div>
       <h1 class="pt">Good day, <em id="meName">there</em></h1>
       <p class="psub">Tell your family how you're doing today.</p>
@@ -887,6 +913,7 @@
     <!-- DOCUMENTS -->
     <div class="view" id="view-docs">
       <div class="page-eyebrow">Document Vault</div>
+      <div class="vtab-host" data-tab="docs"></div>
       <h1 class="pt">Everything <em>in one place</em></h1>
       <p class="psub">Insurance, ID cards, discharge summaries, prescriptions — findable at 2am when it matters.</p>
       <div class="vault-head">
@@ -900,6 +927,10 @@
     <!-- DETAILS & PROFILE -->
     <div class="view" id="view-details">
       <div class="page-eyebrow">Details &amp; Profile</div>
+      <div style="float:right;display:flex;gap:8px;">
+        <button class="btn-out" data-req="member" onclick="editBasics()">Edit basics</button>
+        <button class="btn-primary" data-req="member" onclick="editProfile()">Edit profile</button>
+      </div>
       <h1 class="pt">Everything we know about <em id="detName">them</em></h1>
       <p class="psub">This drives the emergency card, the insights, and how the app adapts. Keep it current.</p>
       <div class="vault-head">
@@ -920,7 +951,8 @@
 
     <!-- FAMILY GROUP -->
     <div class="view" id="view-family">
-      <div class="page-eyebrow">Family Group</div>
+      <div class="page-eyebrow">Family</div>
+      <div style="float:right;"><button class="btn-out" onclick="nav_('community')">Family events board</button></div>
       <h1 class="pt" id="famTitle">Your <em>family</em></h1>
       <p class="psub">Everyone here has their own health vault. Those being cared for share theirs with the family; carers keep theirs private.</p>
       <div id="famBody"></div>
@@ -1015,7 +1047,9 @@
 
     <!-- EMERGENCY CARD -->
     <div class="view" id="view-emergency">
-      <div class="page-eyebrow">Emergency Card</div>
+      <div class="page-eyebrow">Emergency</div>
+      <div style="float:right;"><button class="btn-out" onclick="nav_('team')">Care team &amp; contacts</button></div>
+      <div style="float:right;"><button class="btn-out" data-req="member" onclick="editMedical()">Edit details</button></div>
       <h1 class="pt">If something happens, <em>everything they need</em></h1>
       <p class="psub">One tap. All the critical information a hospital or responder needs — ready to show or print.</p>
       <div id="emCard"></div>
@@ -1208,7 +1242,10 @@ function formModal(cfg){
     document.getElementById('fmFields').innerHTML = cfg.fields.map(f=>{
       if(f.options){
         return '<label class="dl-label">'+esc(f.label)+'</label><div class="chip-row" data-fld="'+f.id+'">'
-          + f.options.map((o,i)=>'<button type="button" class="dchip'+(i===0?' sel':'')+'" data-val="'+esc(o.value)+'" onclick="fmPick(this)">'+esc(o.label)+'</button>').join('')+'</div>';
+          + f.options.map((o,i)=>{
+              const sel = f.options.some(x=>x.selected) ? !!o.selected : i===0;
+              return '<button type="button" class="dchip'+(sel?' sel':'')+'" data-val="'+esc(o.value)+'" onclick="fmPick(this)">'+esc(o.label)+'</button>';
+            }).join('')+'</div>';
       }
       return '<label class="dl-label">'+esc(f.label)+'</label><input class="chat-input fm-input" data-fld="'+esc(f.id)+'" type="'+(f.type||'text')+'" placeholder="'+esc(f.placeholder||'')+'" value="'+esc(f.value||'')+'" style="background:var(--white);width:100%;">';
     }).join('');
@@ -1553,6 +1590,9 @@ async function sendInvite(){
   }catch(e){ toast(e.message,'error'); }
 }
 
+function renderVaultTabs(v){
+  document.querySelectorAll('.vtab-host').forEach(h=>{ h.innerHTML = vaultTabs(h.dataset.tab); });
+}
 function nav_(v){
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   const view=document.getElementById('view-'+v); if(view)view.classList.add('active');
@@ -1563,20 +1603,21 @@ function nav_(v){
   if(v==='meds'){loadMeds();loadMedCal();}
   if(v==='daily')loadDaily();
   if(v==='emergency')loadEmergency();
-  if(v==='monitor')loadMonitor();
+  if(v==='monitor'){loadMonitor();loadTodayExtras();}
   if(v==='team')loadTeam();
   if(v==='activities')loadActivities();
   if(v==='getcare')loadGetcare();
   if(v==='appts')loadAppts();
-  if(v==='me')loadMyDay();
+  if(v==='me'){loadMyDay();loadMyDayWarmth();}
   if(v==='messages')loadMessages();
   if(v==='docs')loadDocs();
   if(v==='details')loadDetails();
   if(v==='wellness')loadWellness();
-  if(v==='vitals')loadVitals();
+  if(v==='vitals'){loadVitals();loadVitalsExtras();}
   if(v==='timeline')loadTimeline();
   if(v==='ops')loadOps();
   if(v==='family')loadFamily();
+  if(['vault','docs','timeline','compare'].includes(v)) renderVaultTabs(v);
   if(v==='community')loadEvents();
   window.scrollTo({top:0,behavior:'smooth'});
 }
@@ -1767,15 +1808,15 @@ async function applyProfileAdaptations(){
 }
 // dependents see a simplified version of the same app
 // allow-list: only the screens that are about THEIR day, not family management
-const DEPENDENT_VIEWS = ['me','messages','appts','meds','vault','compare','trends',
-  'getcare','emergency','team','activities','wellness','details','docs','detail','vitals','timeline','family','community'];
+// The elder's world is four tiles. Everything else is the carer's face.
+const DEPENDENT_VIEWS = ['me','messages','community','emergency'];
 function applyDependentMode(){
   document.body.classList.toggle('dependent-mode', !!IS_DEPENDENT);
   // show/hide each nav item (JS is the single source of truth)
   document.querySelectorAll('.side-btn[data-v]').forEach(btn=>{
     const v = btn.dataset.v;
     let allowed;
-    if(IS_DEPENDENT) allowed = DEPENDENT_VIEWS.includes(v);
+    if(IS_DEPENDENT) allowed = DEPENDENT_VIEWS.includes(v) && !btn.classList.contains('fam-only');
     else allowed = !btn.classList.contains('dep-only');   // family never sees the elder's own screen
     btn.style.display = allowed ? 'flex' : 'none';
   });
@@ -1795,6 +1836,10 @@ function applyDependentMode(){
   });
 }
 
+function vaultTabs(active){
+  const t=[['vault','Reports'],['docs','Documents'],['timeline','Timeline'],['compare','Compare']];
+  return '<div class="vtabs">'+t.map(([v,l])=>'<button class="vtab'+(v===active?' on':'')+'" onclick="nav_(\''+v+'\')">'+l+'</button>').join('')+'</div>';
+}
 async function loadReports(){
   REPORTS = await j('/api/parents/'+PARENT.id+'/reports');
   renderVault();
@@ -2198,7 +2243,6 @@ async function loadMonitor(){
     + '</div></div>'
     + '<div class="mon-row">'+vitalCards+'</div>'
     + '<div class="mon-tile" style="margin-bottom:0.9rem;"><div class="mon-ic" style="background:var(--blue-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3A5A78" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div><div><div class="k">Next appointment'+(m.overdue_count?' · <span style="color:var(--red);">'+m.overdue_count+' overdue</span>':'')+'</div><div class="v" style="font-size:16px;">'+(m.next_appointment? esc(m.next_appointment.title)+' — '+fmtDate(m.next_appointment.appt_date)+(m.next_appointment.appt_time?', '+esc(m.next_appointment.appt_time):'') : 'None upcoming')+'</div></div><button class="btn-sm" style="margin-left:auto;background:var(--ink);color:white;border:none;padding:8px 16px;border-radius:10px;font-size:13px;" onclick="nav_(\'appts\')">View</button></div>'
-    + '<div class="mon-tile"><div class="mon-ic" style="background:var(--gold-light);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#B8860B" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/></svg></div><div><div class="k">Next scheduled service</div><div class="v" style="font-size:16px;">'+(m.next_service? esc(m.next_service.service_type)+' — '+esc(m.next_service.preferred_date||'') : 'Nothing scheduled')+'</div></div><button class="btn-sm" style="margin-left:auto;background:var(--ink);color:white;border:none;padding:8px 16px;border-radius:10px;font-size:13px;" onclick="nav_(\'team\')">Book care</button></div>';
 }
 function monTile(bg,stroke,path,k,v,sub){
   // path may embed circle coords after || for the people icon; keep simple: just draw path
@@ -3456,6 +3500,258 @@ async function loadRiskCard(){
         + '<div><div class="risk-l">'+esc(f.label)+'</div><div class="risk-d">'+esc(f.detail)+'</div></div></div>').join('')
     + '</div>'
     + '<div class="risk-note">'+esc(d.note)+'</div></div>';
+}
+
+
+// ═══════════ EDIT: BASICS / PROFILE / MEDICAL ═══════════
+async function editBasics(){
+  const res = await formModal({ title:'Edit basics', submitLabel:'Save',
+    fields:[
+      {id:'name', label:'Full name', value:PARENT.name||''},
+      {id:'age', label:'Age', value:PARENT.age||'', type:'number'},
+      {id:'city', label:'City', value:PARENT.city||''},
+    ]});
+  if(!res || !res.name) return;
+  try{
+    await j('/api/parents/'+PARENT.id+'/basics',{method:'PUT',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:res.name.trim(), age:res.age?+res.age:null, city:res.city||null})});
+    toast('Saved.','success');
+    ME = await j('/api/me');
+    PARENT = ME.parents.find(x=>x.id===PARENT.id) || PARENT;
+    paintParent(); loadDetails();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+const SEL = {
+  gender:[['','—'],['male','Male'],['female','Female'],['other','Other']],
+  mobility:[['','—'],['independent','On their own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],
+  eyesight:[['','—'],['good','Good'],['glasses','Glasses'],['poor','Poor']],
+  hearing:[['','—'],['good','Good'],['aid','Hearing aid'],['poor','Poor']],
+  speech:[['','—'],['clear','Clear'],['some_difficulty','Some difficulty'],['difficult','Difficult']],
+  memory:[['','—'],['sharp','Sharp'],['sometimes_forgets','Sometimes forgets'],['often_forgets','Often forgets'],['diagnosed_condition','Diagnosed condition']],
+  fall_history:[['','—'],['none','No falls'],['one','One fall'],['multiple','More than one']],
+  lives_alone:[['','—'],['yes','Yes'],['no','No']],
+  smoking:[['','—'],['never','Never'],['former','Used to'],['current','Currently']],
+  alcohol:[['','—'],['never','Never'],['occasional','Occasionally'],['regular','Regularly']],
+  diet:[['','—'],['veg','Vegetarian'],['nonveg','Non-vegetarian'],['jain','Jain'],['diabetic_diet','Diabetic diet']],
+  text_size:[['','—'],['normal','Normal'],['large','Large'],['xl','Extra large']],
+};
+function selOpts(k, cur){
+  return SEL[k].map(([v,l])=>({label:l, value:v})).map(o=>({...o, selected:String(cur||'')===o.value}));
+}
+async function editProfile(){
+  const p = PROFILE||{};
+  const res = await formModal({ title:'Edit profile', subtitle:'Everything here tailors the app and the emergency card.', submitLabel:'Save',
+    fields:[
+      {id:'gender', label:'Gender', options:selOpts('gender',p.gender)},
+      {id:'height_cm', label:'Height (cm)', value:p.height_cm||'', type:'number'},
+      {id:'weight_kg', label:'Weight (kg)', value:p.weight_kg||'', type:'number'},
+      {id:'phone', label:'Mobile number', value:p.phone||''},
+      {id:'languages', label:'Languages', value:p.languages||''},
+      {id:'mobility', label:'Getting around', options:selOpts('mobility',p.mobility)},
+      {id:'eyesight', label:'Eyesight', options:selOpts('eyesight',p.eyesight)},
+      {id:'hearing', label:'Hearing', options:selOpts('hearing',p.hearing)},
+      {id:'speech', label:'Speech', options:selOpts('speech',p.speech)},
+      {id:'memory', label:'Memory', options:selOpts('memory',p.memory)},
+      {id:'fall_history', label:'Falls in the last year', options:selOpts('fall_history',p.fall_history)},
+      {id:'lives_alone', label:'Lives alone?', options:selOpts('lives_alone',p.lives_alone)},
+      {id:'smoking', label:'Smoking', options:selOpts('smoking',p.smoking)},
+      {id:'alcohol', label:'Alcohol', options:selOpts('alcohol',p.alcohol)},
+      {id:'diet', label:'Diet', options:selOpts('diet',p.diet)},
+      {id:'text_size', label:'Text size in the app', options:selOpts('text_size',p.text_size)},
+    ]});
+  if(!res) return;
+  const body={};
+  for(const k of Object.keys(res)){
+    if(res[k]==='' || res[k]==null) continue;
+    body[k] = (k==='lives_alone') ? res[k]==='yes' : res[k];
+  }
+  try{
+    await j('/api/parents/'+PARENT.id+'/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    toast('Profile saved.','success'); loadDetails();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function editMedical(){
+  const res = await formModal({ title:'Edit medical details', subtitle:'This appears on the emergency card.', submitLabel:'Save',
+    fields:[
+      {id:'blood_group', label:'Blood group', value:PARENT.blood_group||'', placeholder:'e.g. B+'},
+      {id:'allergies', label:'Allergies', value:PARENT.allergies||'', placeholder:'e.g. Penicillin, peanuts'},
+      {id:'conditions', label:'Ongoing conditions', value:PARENT.conditions||'', placeholder:'e.g. Hypertension, diabetes'},
+      {id:'primary_doctor', label:'Doctor', value:PARENT.primary_doctor||'', placeholder:'e.g. Dr. Raj, Sushrutha Clinic'},
+      {id:'doctor_phone', label:'Doctor\'s phone', value:PARENT.doctor_phone||''},
+    ]});
+  if(!res) return;
+  try{
+    await j('/api/parents/'+PARENT.id+'/emergency-info',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    toast('Saved.','success');
+    ME = await j('/api/me');
+    PARENT = ME.parents.find(x=>x.id===PARENT.id) || PARENT;
+    if(document.getElementById('view-emergency').classList.contains('active')) loadEmergency(); else loadDetails();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+
+// ═══════════ TODAY: status strip · attention · checklist ═══════════
+// The whole page exists to be boring on a good day.
+async function loadTodayExtras(){
+  loadStatusStrip(); loadAttention(); loadChecklist();
+}
+async function loadStatusStrip(){
+  const host=document.getElementById('statusStrip'); if(!host) return;
+  const cared = ME.parents.filter(p=>!(p.name===ME.user.name && !ME.is_dependent));
+  if(cared.length<2){ host.innerHTML=''; return; }   // single person: the page below already covers it
+  const rows = await Promise.all(cared.map(async p=>{
+    try{
+      const m = await j('/api/parents/'+p.id+'/monitor');
+      const ci = m.checkin ? '✓ checked in' : 'no check-in yet';
+      const meds = m.medication ? m.medication.done+'/'+m.medication.due+' meds' : '';
+      const ok = m.checkin && m.medication && m.medication.done>=m.medication.due && !(m.open_alerts||0);
+      return {p, ci, meds, alerts:m.open_alerts||0, ok};
+    }catch(e){ return {p, ci:'—', meds:'', alerts:0, ok:true}; }
+  }));
+  host.innerHTML = '<div class="strip">'+rows.map(r=>
+    '<button class="strip-card'+(r.ok?' ok':' warn')+'" onclick="switchParent(\''+r.p.id+'\')">'
+    + '<span class="strip-dot"></span><span class="strip-name">'+esc((r.p.name||'').split(' ')[0])+'</span>'
+    + '<span class="strip-meta">'+esc(r.ci)+(r.meds?' · '+esc(r.meds):'')+(r.alerts?' · ⚠ '+r.alerts:'')+'</span></button>'
+  ).join('')+'</div>';
+}
+async function loadAttention(){
+  const host=document.getElementById('attentionHost'); if(!host) return;
+  let q=[];
+  try{ q = await j('/api/ops/queue'); }catch(e){ host.innerHTML=''; return; }
+  const items = (q.alerts||[]).filter(a=>a.status==='open');
+  const badge=document.getElementById('opsBadge');
+  if(badge) badge.textContent = items.length||'';
+  if(!items.length){ host.innerHTML=''; return; }
+  host.innerHTML = '<div class="attn">'+items.slice(0,4).map(a=>
+    '<div class="attn-row'+(a.severity==='sos'?' sos':'')+'">'
+    + '<div class="attn-msg">'+(a.severity==='sos'?'🚨 ':'⚠ ')+esc(a.message)+'</div>'
+    + '<div class="attn-act"><button class="btn-sm-out" onclick="resolveAlert(\''+a.parent_id+'\',\''+a.id+'\')">Resolved</button></div></div>'
+  ).join('')+'</div>';
+}
+async function resolveAlert(pid, id){
+  try{ await j('/api/parents/'+pid+'/alerts/'+id+'/resolve',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({note:'Handled from Today'})}); }
+  catch(e){ toast(e.message,'error'); }
+  loadAttention();
+}
+async function loadChecklist(){
+  const host=document.getElementById('setupChecklist'); if(!host) return;
+  try{
+    const cared = ME.parents.filter(p=>!(p.name===ME.user.name && !ME.is_dependent));
+    const pid = (cared[0]||ME.parents[0]).id;
+    const [meds, vit, reps, hh] = await Promise.all([
+      j('/api/parents/'+pid+'/medications'), j('/api/parents/'+pid+'/vitals'),
+      j('/api/parents/'+pid+'/reports'), j('/api/households'),
+    ]);
+    const steps=[
+      {done:meds.length>0, label:'Add their medicines', go:"nav_('meds')"},
+      {done:vit.length>0, label:'Log one BP or sugar reading', go:"nav_('vitals')"},
+      {done:reps.length>0, label:'Upload a report or prescription', go:"nav_('vault')"},
+      {done:(hh[0]&&hh[0].member_count>1)||ME.parents.length>1, label:'Invite the family', go:"nav_('family')"},
+    ];
+    const left=steps.filter(x=>!x.done);
+    if(!left.length){ host.innerHTML=''; return; }
+    host.innerHTML='<div class="checklist"><div class="chk-title">Set things up — '+(steps.length-left.length)+' of '+steps.length+' done</div>'
+      + steps.map(x=>'<button class="chk-row'+(x.done?' done':'')+'" onclick="'+(x.done?'':x.go)+'">'
+        + '<span class="chk-tick">'+(x.done?'✓':'○')+'</span>'+esc(x.label)+'</button>').join('')+'</div>';
+  }catch(e){ host.innerHTML=''; }
+}
+
+// ═══════════ DOCTOR SUMMARY (the growth loop) ═══════════
+async function doctorSummary(){
+  const pid = PARENT.id;
+  const [em, meds, vits, reps, risk] = await Promise.all([
+    j('/api/parents/'+pid+'/emergency-card'),
+    j('/api/parents/'+pid+'/medications'),
+    j('/api/parents/'+pid+'/vitals'),
+    j('/api/parents/'+pid+'/reports'),
+    j('/api/parents/'+pid+'/risk-awareness').catch(()=>null),
+  ]);
+  const slot=m=>['morning','afternoon','night'].filter(x=>m['slot_'+x]).map(x=>({morning:'Morning',afternoon:'Afternoon',night:'Night'})[x]).join(' · ')||'—';
+  const food={before:'before food',after:'after food',with:'with food'};
+  const v30=vits.slice(0,12);
+  const w=window.open('','_blank');
+  w.document.write('<html><head><title>'+esc(em.name)+' — Health Summary</title><style>'
+    +'body{font-family:Georgia,serif;max-width:720px;margin:2rem auto;color:#222;line-height:1.5;}'
+    +'h1{font-size:22px;margin-bottom:0;} .sub{color:#777;font-size:13px;margin-bottom:1.4rem;}'
+    +'h2{font-size:14px;text-transform:uppercase;letter-spacing:1px;border-bottom:1.5px solid #222;padding-bottom:4px;margin:1.5rem 0 0.6rem;}'
+    +'table{width:100%;border-collapse:collapse;font-size:13.5px;} td,th{padding:5px 8px;border-bottom:1px solid #e5e0d8;text-align:left;vertical-align:top;}'
+    +'.tag{display:inline-block;border:1px solid #999;border-radius:12px;padding:1px 9px;font-size:12px;margin:0 4px 4px 0;}'
+    +'.foot{margin-top:2rem;font-size:11.5px;color:#999;border-top:1px dashed #ccc;padding-top:0.6rem;}'
+    +'@media print{ .noprint{display:none;} }</style></head><body>'
+    +'<button class="noprint" onclick="window.print()" style="float:right;padding:8px 16px;">Print / Save as PDF</button>'
+    +'<h1>'+esc(em.name)+'</h1><div class="sub">'+(em.age?em.age+' years':'')+(em.blood_group?' · '+esc(em.blood_group):'')
+    +' · Prepared '+new Date().toLocaleDateString('en-IN',{day:'numeric',month:'long',year:'numeric'})+' · ParentFirst family record</div>'
+    +'<h2>Conditions & allergies</h2><div>'
+    +((em.conditions||'').split(',').filter(x=>x.trim()).map(c=>'<span class="tag">'+esc(c.trim())+'</span>').join('')||'None on record')
+    +(em.allergies?'<div style="margin-top:6px;"><b>Allergies:</b> '+esc(em.allergies)+'</div>':'')+'</div>'
+    +'<h2>Current medicines ('+meds.length+')</h2><table><tr><th>Medicine</th><th>When</th><th>Food</th></tr>'
+    + meds.map(m=>'<tr><td><b>'+esc(m.name)+'</b>'+(m.dosage?' '+esc(m.dosage):'')+'</td><td>'+slot(m)+'</td><td>'+(food[m.food_timing]||'—')+'</td></tr>').join('')
+    +'</table>'
+    +'<h2>Recent readings</h2><table><tr><th>Date</th><th>BP</th><th>Sugar</th><th>Pulse</th><th>Weight</th></tr>'
+    + (v30.map(v=>'<tr><td>'+esc(String(v.taken_on).slice(0,10))+'</td><td>'+(v.systolic?v.systolic+'/'+v.diastolic:'—')+'</td><td>'+(v.sugar||'—')+'</td><td>'+(v.pulse||'—')+'</td><td>'+(v.weight_kg||'—')+'</td></tr>').join('')||'<tr><td colspan=5>No readings this month</td></tr>')
+    +'</table>'
+    +(risk&&risk.factors?'<h2>Risk factors present ('+risk.present+' of '+risk.total+')</h2><div>'
+      + risk.factors.filter(f=>f.present).map(f=>'<span class="tag">'+esc(f.label)+'</span>').join('')
+      + '<div style="font-size:12px;color:#777;margin-top:4px;">'+esc(risk.note)+'</div></div>':'')
+    +'<h2>Recent reports</h2><table>'
+    + (reps.slice(0,8).map(r=>'<tr><td>'+esc(String(r.report_date).slice(0,10))+'</td><td>'+esc(r.report_type||'')+'</td><td>'+esc(r.lab_name||r.doctor_name||'')+'</td></tr>').join('')||'<tr><td>None uploaded</td></tr>')
+    +'</table>'
+    +(em.doctor?'<h2>Regular doctor</h2><div>'+esc(em.doctor)+(em.doctor_phone?' · '+esc(em.doctor_phone):'')+'</div>':'')
+    +'<div class="foot">Family contact: '+esc(ME.user.name)+' ('+esc(ME.user.email)+'). Generated by ParentFirst — the family\'s shared health record.</div>'
+    +'</body></html>');
+  w.document.close();
+}
+
+
+// vitals page absorbs Health Trends + the risk card (nav item removed)
+async function loadVitalsExtras(){
+  // risk card into its second host
+  const rc=document.getElementById('riskCard'); const rc2=document.getElementById('riskCard2');
+  if(rc2){ const keep=document.getElementById('riskCard'); await loadRiskCardInto(rc2); }
+  // trends grid into its second host
+  const g=document.getElementById('trendGrid2');
+  if(g && typeof buildTrends==='function'){
+    const orig=document.getElementById('trendGrid');
+    try{ await buildTrends(); if(orig && orig.innerHTML) g.innerHTML=orig.innerHTML; }catch(e){}
+  }
+}
+async function loadRiskCardInto(host){
+  try{
+    const own = ME && ME.user && PARENT.name === ME.user.name && !ME.is_dependent;
+    if(own && PARENT.age && PARENT.age < 50){ host.innerHTML=''; return; }
+    const d = await j('/api/parents/'+PARENT.id+'/risk-awareness');
+    if(!d.factors || !d.factors.length){ host.innerHTML=''; return; }
+    host.innerHTML =
+      '<div class="risk-card"><div class="risk-head"><div><div class="risk-title">Stroke &amp; heart — risk factors present</div>'
+      + '<div class="risk-count">'+d.present+' of '+d.total+'</div></div></div>'
+      + '<div class="risk-rows">'+d.factors.map(f=>'<div class="risk-row'+(f.present?' on':'')+'">'
+        + '<span class="risk-dot">'+(f.present?'●':'○')+'</span><div><div class="risk-l">'+esc(f.label)+'</div><div class="risk-d">'+esc(f.detail)+'</div></div></div>').join('')
+      + '</div><div class="risk-note">'+esc(d.note)+'</div></div>';
+  }catch(e){ host.innerHTML=''; }
+}
+
+// ═══════════ ELDER MY DAY: warmth blocks ═══════════
+async function loadMyDayWarmth(){
+  const host=document.getElementById('warmth'); if(!host) return;
+  let html='';
+  try{
+    const msgs = await j('/api/parents/'+PARENT.id+'/messages');
+    const last = (msgs||[]).filter(m=>m.author_name && m.author_name!==ME.user.name).slice(-1)[0];
+    if(last) html+='<div class="warm-card"><div class="warm-k">💌 From '+esc(last.author_name)+'</div>'
+      + '<div class="warm-v">'+(last.kind==='voice'?'sent you a voice note — tap My Family to listen':esc((last.body||'').slice(0,120)))+'</div></div>';
+  }catch(e){}
+  try{
+    const hh = await j('/api/households');
+    if(hh[0]){
+      const evs = await j('/api/households/'+hh[0].id+'/events');
+      const today=new Date().toISOString().slice(0,10);
+      const next=(evs||[]).find(e=>e.event_date>=today);
+      if(next) html+='<div class="warm-card"><div class="warm-k">📅 '+(next.event_date===today?'Today':new Date(next.event_date+'T00:00').toLocaleDateString('en-IN',{weekday:'long'}))+'</div>'
+        + '<div class="warm-v">'+esc(next.title)+(next.event_time?' · '+esc(next.event_time):'')+(next.place?' · '+esc(next.place):'')+'</div></div>';
+    }
+  }catch(e){}
+  host.innerHTML = html;
 }
 
 init();

@@ -344,7 +344,10 @@ Caregiver note: ${notes || '-'}`;
   });
 
   app.put('/api/parents/:parentId/emergency-info', async (req, reply) => {
-    if (!need(req, reply, 'admin')) return;
+    // family maintains this, not just the group admin — and the person themselves
+    if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent')) {
+      return reply.code(403).send({ error: 'not allowed to edit this' });
+    }
     const { blood_group, allergies, conditions, primary_doctor, doctor_phone } = req.body || {};
     const { rows } = await pool.query(
       `UPDATE parents SET
@@ -818,6 +821,19 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     return rows[0] || { parent_id: req.params.parentId, text_size: 'normal' };
   });
 
+  // edit the basics on the person record itself
+  app.put('/api/parents/:parentId/basics', async (req, reply) => {
+    if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent')) {
+      return reply.code(403).send({ error: 'not allowed to edit this profile' });
+    }
+    const { name, age, city } = req.body || {};
+    if (!name) return reply.code(400).send({ error: 'name required' });
+    const { rows } = await pool.query(
+      `UPDATE parents SET name=$2, age=$3, city=$4 WHERE id=$1 RETURNING id, name, age, city`,
+      [req.params.parentId, name, age ? +age : null, city || null]);
+    return rows[0];
+  });
+
   app.put('/api/parents/:parentId/profile', async (req, reply) => {
     if (!need(req, reply, 'member')) return;
     const client = await pool.connect();
@@ -1074,13 +1090,13 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       `SELECT sr.*, p.name AS parent_name, p.city, p.id AS pid
        FROM service_requests sr
        JOIN parents p ON p.id = sr.parent_id
-       JOIN family_members fm ON fm.parent_id = p.id AND fm.user_id = $1 AND fm.role='admin'
+       JOIN family_members fm ON fm.parent_id = p.id AND fm.user_id = $1 AND fm.role IN ('admin','member')
        ORDER BY (sr.status='pending') DESC, sr.created_at DESC LIMIT 100`, [req.user.id]);
     const { rows: alerts } = await pool.query(
       `SELECT a.*, p.name AS parent_name, u.name AS by_name
        FROM alerts a
        JOIN parents p ON p.id = a.parent_id
-       JOIN family_members fm ON fm.parent_id = p.id AND fm.user_id = $1 AND fm.role='admin'
+       JOIN family_members fm ON fm.parent_id = p.id AND fm.user_id = $1 AND fm.role IN ('admin','member')
        LEFT JOIN users u ON u.id = a.created_by
        WHERE a.status='open' ORDER BY a.created_at DESC LIMIT 50`, [req.user.id]);
     // contact numbers, so the operator can call straight from the queue

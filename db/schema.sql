@@ -661,3 +661,13 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_push_user ON push_subscriptions(user_id);
+
+CREATE TABLE IF NOT EXISTS loop_marks (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  day        DATE NOT NULL,
+  kind       TEXT NOT NULL,
+  ref_id     UUID NOT NULL,
+  slot       TEXT NOT NULL DEFAULT '',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (day, kind, ref_id, slot)
+);
