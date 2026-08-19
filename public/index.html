@@ -1938,11 +1938,15 @@ async function explainReport(id){
 }
 
 function buildCompare(){
-  const opts = [...REPORTS].sort((a,b)=>a.report_date.localeCompare(b.report_date))
+  // Compare is for LAB REPORTS with measurable parameters. A prescription has
+  // nothing numeric to diff — listing them here only creates empty comparisons.
+  const comparable = REPORTS.filter(r => r.doc_kind !== 'prescription' && !/prescription/i.test(r.report_type||''));
+  const opts = [...comparable].sort((a,b)=>a.report_date.localeCompare(b.report_date))
     .map(r=>'<option value="'+r.id+'">'+fmtDate(r.report_date)+' - '+esc(r.report_type)+'</option>').join('');
   const a=document.getElementById('cmpA'), b=document.getElementById('cmpB');
-  a.innerHTML=opts; b.innerHTML=opts;
-  const sorted=[...REPORTS].sort((x,y)=>x.report_date.localeCompare(y.report_date));
+  const empty='<option value="">— need two lab reports —</option>';
+  a.innerHTML=opts||empty; b.innerHTML=opts||empty;
+  const sorted=[...comparable].sort((x,y)=>x.report_date.localeCompare(y.report_date));
   if(sorted.length>=2){ a.value=sorted[0].id; b.value=sorted[sorted.length-1].id; }
   // AI summary panel is optional — soften it when there's no key
   const aiPanel=document.querySelector('.cmp-ai');
