@@ -1736,7 +1736,7 @@ async function boot(){
 let ONB = { step:0, type:'owner', data:{}, profile:{} };
 // Two paths, because a carer and a parent need different things.
 const STEPS_CARER = [
-  { title:'Tell us about you', sub:'Just the basics — you can add health details later.', fields:'basics' },
+  { title:'Who do you care for?', sub:"Add the person you look after. You can add their health details and more people later.", fields:'basics' },
 ];
 const STEPS_PARENT = [
   { title:'Tell us about you', sub:'A few basics to set up your health vault.', fields:'basics' },
@@ -1745,7 +1745,7 @@ const STEPS_PARENT = [
 ];
 function onbSteps(){ return ONB.role==='parent' ? STEPS_PARENT : STEPS_CARER; }
 function startOnboarding(){
-  const role = window._signupRole || (ME && ME.is_dependent ? 'parent' : 'carer');
+  const role = (ME && ME.user && ME.user.signup_role) || window._signupRole || (ME && ME.is_dependent ? 'parent' : 'carer');
   ONB = { step:0, role, data:{}, profile:{} };
   document.getElementById('onbOverlay').classList.add('open');
   renderOnb();
@@ -1757,7 +1757,7 @@ function renderOnb(){
   document.getElementById('onbBar').style.width = ((ONB.step+1)/onbSteps().length*100)+'%';
   // intake is always about the person signing up — one human, one record.
   // Records for someone who won't use the app are created from Family Group.
-  document.getElementById('onbTitle').textContent = ONB.step===0 ? 'Tell us about you' : s.title;
+  document.getElementById('onbTitle').textContent = s.title;
   document.getElementById('onbSub').textContent = s.sub;
   document.getElementById('onbErr').innerHTML='';
   document.getElementById('onbBack').style.display = ONB.step>0 ? 'block':'none';
@@ -1765,10 +1765,12 @@ function renderOnb(){
   document.getElementById('onbNext').textContent = ONB.step===onbSteps().length-1 ? 'Finish' : 'Continue';
   let h='';
   if(s.fields==='basics'){
-    h += onbInput('name','Your full name','e.g. Sunita Khandelwal', ONB.data.name||'');
-    h += onbInput('age','Your age','e.g. 62',ONB.data.age||'','number');
-    h += onbInput('city','Where you live','e.g. Bengaluru',ONB.data.city||'');
-    h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
+    const carer = ONB.role!=='parent';
+    h += onbInput('name', carer?'Their full name':'Your full name', carer?'e.g. Papa / Sindhoormal':'e.g. Sunita Khandelwal', ONB.data.name||'');
+    h += onbInput('age', carer?'Their age':'Your age','e.g. 78',ONB.data.age||'','number');
+    if(carer) h += onbChips('relation','Your relation to them',[['father','Father'],['mother','Mother'],['grandfather','Grandfather'],['grandmother','Grandmother'],['other','Other']],ONB.profile.relation);
+    h += onbInput('city', carer?'Where they live':'Where you live','e.g. Bengaluru',ONB.data.city||'');
+    if(!carer) h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
   } else if(s.fields==='function'){
     h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
@@ -1797,7 +1799,7 @@ function onbChips(id,label,opts,sel){
 function collectOnb(){
   document.querySelectorAll('#onbBody .onb-f').forEach(el=>{
     const k=el.dataset.k, v=el.value.trim();
-    if(['name','age','relation','city','invite_code','group_name','phone'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
+    if(['name','age','city','invite_code','group_name','phone'].includes(k)) ONB.data[k]=v; else ONB.profile[k]=v;
   });
   document.querySelectorAll('#onbBody .onb-c').forEach(el=>{
     const k=el.dataset.k, sel=el.querySelector('.dchip.sel');
@@ -3409,9 +3411,9 @@ async function loadEvents(){
   let hh=[];
   try{ hh = (await j('/api/families')).families; }catch(e){}
   if(!hh.length){ host.innerHTML='<div class="psub">Join or create your family group first — events are shared with the whole family.</div>'; return; }
-  HOUSE = HOUSE || hh[0];
+  const famId = ACTIVE_FAMILY || hh[0].id;
   let evs=[];
-  if(!famId){ host.innerHTML=''; return; } try{ evs = await j('/api/families/'+famId+'/events'); }catch(e){ host.innerHTML=''; return; }
+  try{ evs = await j('/api/families/'+famId+'/events'); }catch(e){ host.innerHTML=''; return; }
   if(!evs.length){ host.innerHTML='<div class="psub">Nothing planned yet. Add the first outing.</div>'; return; }
   host.innerHTML = evs.map(e=>{
     const d=new Date(e.event_date+'T00:00');
@@ -3438,13 +3440,19 @@ async function addEvent(){
       {id:'notes', label:'Notes (optional)', placeholder:'e.g. Ramu Kaka will take him'},
     ]});
   if(!res || !res.title || !res.event_date) return;
+  const famId = ACTIVE_FAMILY || hh[0].id;
   try{
-    if(!famId){ toast('Create a family first.','error'); return; } await j('/api/families/'+famId+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    await j('/api/families/'+famId+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
     toast('Added to the family board.','success'); loadEvents();
   }catch(e){ toast(e.message,'error'); }
 }
 async function delEvent(id){
-  try{ await j('/api/families/'+(ACTIVE_FAMILY||(hh[0]&&hh[0].id))+'/events/'+id,{method:'DELETE'}); loadEvents(); }
+  if(!confirm('Remove this event?')) return;
+  let hh=[];
+  try{ hh = (await j('/api/families')).families; }catch(e){ return; }
+  if(!hh.length) return;
+  const famId = ACTIVE_FAMILY || hh[0].id;
+  try{ await j('/api/families/'+famId+'/events/'+id,{method:'DELETE'}); loadEvents(); }
   catch(e){ toast(e.message,'error'); }
 }
 

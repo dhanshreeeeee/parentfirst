@@ -254,7 +254,7 @@ async function authPluginImpl(app, { pool }) {
   // ── me: current user + the parents they can access (with role) ──
   app.get('/api/me', async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: 'not authenticated' });
-    const { rows: u } = await pool.query('SELECT onboarded FROM users WHERE id=$1', [req.user.id]);
+    const { rows: u } = await pool.query('SELECT onboarded, signup_role FROM users WHERE id=$1', [req.user.id]);
     const { rows: parents } = await pool.query(
       `SELECT p.*, fm.role FROM family_members fm
        JOIN parents p ON p.id = fm.parent_id
@@ -269,7 +269,7 @@ async function authPluginImpl(app, { pool }) {
     // is this user themselves a dependent? (their own person record)
     const selfRow = parents.find((p) => p.user_id === req.user.id);
     return {
-      user: { ...req.user, onboarded: !!u[0]?.onboarded },
+      user: { ...req.user, onboarded: !!u[0]?.onboarded, signup_role: u[0]?.signup_role || null },
       parents,
       families,
       is_dependent: !!selfRow,

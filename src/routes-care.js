@@ -751,31 +751,80 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
   //   account_type 'dependent' → creates their OWN parent record, links user_id, role 'dependent'
   //   account_type 'owner'     → creates a parent record they administer (role 'admin')
   app.post('/api/onboarding', async (req, reply) => {
-    // Everyone who signs up gets exactly ONE record: their own. Whether their
-    // vault is shared is decided by their care_role in the household — never by
-    // creating extra records. This is what prevents the same human existing twice.
-    const { name, age, city, gender, phone, account_type, group_name, profile } = req.body || {};
-    const personName = name || req.user.name;
+    // Two distinct paths:
+    //   carer  -> creates the PERSON THEY CARE FOR (e.g. their father) + a family
+    //             they OWN + a care relationship. Carer lands in the carer view.
+    //   parent -> creates their OWN self record + a family they belong to as
+    //             CARE_RECIPIENT. Parent lands in the elder view.
+    const { name, age, city, gender, phone, account_type, profile } = req.body || {};
+    const isCarer = (account_type || 'carer') !== 'parent';
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      // reuse the self record if one already exists (e.g. created by joining a group)
+
+      if (isCarer) {
+        // the carer's own name came from signup; `name` here is the person they care for
+        const personName = name || 'My parent';
+        // reuse a family this user already owns, else make one
+        let { rows: fam } = await client.query(
+          `SELECT f.id FROM families f JOIN family_memberships m ON m.family_id=f.id
+           WHERE m.user_id=$1 AND m.role='OWNER' ORDER BY f.created_at LIMIT 1`, [req.user.id]);
+        let familyId = fam[0] && fam[0].id;
+        if (!familyId) {
+          const { rows: nf } = await client.query(
+            `INSERT INTO families (name, created_by) VALUES ($1,$2) RETURNING id`,
+            [(req.user.name || 'My') + "'s family", req.user.id]);
+          familyId = nf[0].id;
+          await client.query(
+            `INSERT INTO family_memberships (family_id, user_id, role) VALUES ($1,$2,'OWNER')
+             ON CONFLICT (family_id, user_id) DO NOTHING`, [familyId, req.user.id]);
+        }
+        // create the cared-for person (no login of their own yet)
+        const { rows: pr } = await client.query(
+          `INSERT INTO parents (name, age, relation, city, created_by)
+           VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+          [personName, age || null, (profile && profile.relation) || 'parent', city || null, req.user.id]);
+        const parent = pr[0];
+        await client.query(
+          `INSERT INTO persons_in_family (family_id, person_id) VALUES ($1,$2)
+           ON CONFLICT (family_id, person_id) DO NOTHING`, [familyId, parent.id]);
+        await client.query(
+          `INSERT INTO care_relationships (family_id, caregiver_user_id, person_id, permissions)
+           VALUES ($1,$2,$3,$4) ON CONFLICT (family_id, caregiver_user_id, person_id) DO NOTHING`,
+          [familyId, req.user.id, parent.id,
+           JSON.stringify({VIEW_REPORTS:true,UPLOAD_REPORTS:true,MANAGE_MEDICINES:true,RECORD_VITALS:true,MANAGE_APPOINTMENTS:true,EMERGENCY_ACCESS:true})]);
+        // health/profile details belong to the cared-for person
+        const prof = { ...(profile || {}) };
+        if (gender) prof.gender = gender;
+        delete prof.relation;
+        if (Object.keys(prof).length) await upsertProfile(client, parent.id, prof);
+        if (profile && (profile.allergies || profile.conditions || profile.blood_group)) {
+          await client.query(
+            `UPDATE parents SET allergies=COALESCE($2,allergies), conditions=COALESCE($3,conditions),
+               blood_group=COALESCE($4,blood_group) WHERE id=$1`,
+            [parent.id, profile.allergies || null, profile.conditions || null, profile.blood_group || null]);
+        }
+        await client.query('UPDATE users SET onboarded=true, signup_role=$2 WHERE id=$1', [req.user.id, 'carer']);
+        await client.query('COMMIT');
+        return { parent, account_type: 'carer' };
+      }
+
+      // ── parent path: the person signing up IS the patient ──
+      const personName = name || req.user.name;
       const { rows: existing } = await client.query(
         'SELECT id FROM parents WHERE user_id=$1 ORDER BY created_at LIMIT 1', [req.user.id]);
       let parent;
       if (existing[0]) {
         const { rows } = await client.query(
-          `UPDATE persons SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city)
-           WHERE id=$1 RETURNING *`,
+          `UPDATE parents SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city) WHERE id=$1 RETURNING *`,
           [existing[0].id, personName, age || null, city || null]);
         parent = rows[0];
       } else {
         const { rows } = await client.query(
-          `INSERT INTO persons (name, age, relation, city, created_by, user_id)
+          `INSERT INTO parents (name, age, relation, city, created_by, user_id)
            VALUES ($1,$2,'self',$3,$4,$4) RETURNING *`,
           [personName, age || null, city || null, req.user.id]);
         parent = rows[0];
-        // a person who signs up as themselves needs a family + self-membership
         const { rows: f } = await client.query(
           `INSERT INTO families (name, created_by) VALUES ($1,$2) RETURNING id`,
           [(personName || 'My') + "'s family", req.user.id]);
@@ -785,20 +834,21 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       const prof = { ...(profile || {}) };
       if (gender) prof.gender = gender;
       if (phone) prof.phone = phone;
+      delete prof.relation;
       if (Object.keys(prof).length) await upsertProfile(client, parent.id, prof);
-      if (profile?.allergies || profile?.conditions || profile?.blood_group) {
+      if (profile && (profile.allergies || profile.conditions || profile.blood_group)) {
         await client.query(
           `UPDATE parents SET allergies=COALESCE($2,allergies), conditions=COALESCE($3,conditions),
              blood_group=COALESCE($4,blood_group) WHERE id=$1`,
           [parent.id, profile.allergies || null, profile.conditions || null, profile.blood_group || null]);
       }
-      await client.query('UPDATE users SET onboarded=true, signup_role=$2 WHERE id=$1',
-        [req.user.id, account_type === 'parent' ? 'parent' : 'carer']);
+      await client.query('UPDATE users SET onboarded=true, signup_role=$2 WHERE id=$1', [req.user.id, 'parent']);
       await client.query('COMMIT');
-      return { parent, account_type: account_type || 'carer', group_name: group_name || null };
+      return { parent, account_type: 'parent' };
     } catch (e) {
       await client.query('ROLLBACK');
-      throw e;
+      req.log.error('onboarding: ' + e.message);
+      return reply.code(500).send({ error: e.message });
     } finally { client.release(); }
   });
 
