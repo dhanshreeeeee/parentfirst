@@ -13,6 +13,9 @@ CREATE TABLE IF NOT EXISTS parents (
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- canonical alias: persons == parents (updatable view)
+CREATE OR REPLACE VIEW persons AS SELECT * FROM parents;
+
 -- ── Reports (one uploaded document) ────────────────────────────
 CREATE TABLE IF NOT EXISTS reports (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -64,50 +67,6 @@ INSERT INTO reference_ranges (name, min_value, max_value, unit) VALUES
 ON CONFLICT (name) DO NOTHING;
 
 -- ── Seed: demo parent + two sample reports (Jan vs Jun story) ──
-DO $$
-DECLARE
-  v_parent UUID;
-  v_r1 UUID;
-  v_r2 UUID;
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM parents) THEN
-    INSERT INTO parents (name, age, relation, city)
-    VALUES ('Ramesh Sharma', 76, 'father', 'Delhi')
-    RETURNING id INTO v_parent;
-
-    INSERT INTO reports (parent_id, report_type, lab_name, doctor_name, report_date, source_file)
-    VALUES (v_parent, 'Complete Blood + Metabolic Panel', 'Dr. Lal PathLabs', 'Dr. A. Mehta', '2026-01-12', 'sample-jan.pdf')
-    RETURNING id INTO v_r1;
-
-    INSERT INTO report_params (report_id, name, value, unit) VALUES
-      (v_r1, 'Hemoglobin', 12.4, 'g/dL'),
-      (v_r1, 'HbA1c', 8.1, '%'),
-      (v_r1, 'Fasting Glucose', 156, 'mg/dL'),
-      (v_r1, 'Total Cholesterol', 224, 'mg/dL'),
-      (v_r1, 'LDL Cholesterol', 148, 'mg/dL'),
-      (v_r1, 'HDL Cholesterol', 38, 'mg/dL'),
-      (v_r1, 'Triglycerides', 198, 'mg/dL'),
-      (v_r1, 'Creatinine', 1.1, 'mg/dL'),
-      (v_r1, 'Vitamin D', 18, 'ng/mL'),
-      (v_r1, 'TSH', 3.2, 'mIU/L');
-
-    INSERT INTO reports (parent_id, report_type, lab_name, doctor_name, report_date, source_file)
-    VALUES (v_parent, 'Complete Blood + Metabolic Panel', 'Dr. Lal PathLabs', 'Dr. A. Mehta', '2026-06-20', 'sample-jun.pdf')
-    RETURNING id INTO v_r2;
-
-    INSERT INTO report_params (report_id, name, value, unit) VALUES
-      (v_r2, 'Hemoglobin', 13.6, 'g/dL'),
-      (v_r2, 'HbA1c', 6.9, '%'),
-      (v_r2, 'Fasting Glucose', 118, 'mg/dL'),
-      (v_r2, 'Total Cholesterol', 186, 'mg/dL'),
-      (v_r2, 'LDL Cholesterol', 104, 'mg/dL'),
-      (v_r2, 'HDL Cholesterol', 44, 'mg/dL'),
-      (v_r2, 'Triglycerides', 142, 'mg/dL'),
-      (v_r2, 'Creatinine', 1.0, 'mg/dL'),
-      (v_r2, 'Vitamin D', 34, 'ng/mL'),
-      (v_r2, 'TSH', 2.8, 'mIU/L');
-  END IF;
-END $$;
 --   psql -d parentfirst_vault -f db/migrations/001_care_modules.sql
 
 -- ── Emergency info on the parent ───────────────────────────────
@@ -175,46 +134,6 @@ CREATE TABLE IF NOT EXISTS daily_logs (
 CREATE INDEX IF NOT EXISTS idx_dailylog_parent_date ON daily_logs(parent_id, log_date DESC);
 
 -- ── Seed demo data (only if the demo parent exists and has none) ─
-DO $$
-DECLARE v_parent UUID;
-BEGIN
-  SELECT id INTO v_parent FROM parents ORDER BY created_at LIMIT 1;
-  IF v_parent IS NULL THEN RETURN; END IF;
-
-  -- emergency info
-  UPDATE parents SET
-    blood_group   = COALESCE(blood_group, 'B+'),
-    allergies     = COALESCE(allergies, 'Penicillin'),
-    conditions    = COALESCE(conditions, 'Type 2 Diabetes, Hypertension'),
-    primary_doctor= COALESCE(primary_doctor, 'Dr. A. Mehta'),
-    doctor_phone  = COALESCE(doctor_phone, '+91 98xxxxxx01')
-  WHERE id = v_parent;
-
-  -- contacts
-  IF NOT EXISTS (SELECT 1 FROM contacts WHERE parent_id = v_parent) THEN
-    INSERT INTO contacts (parent_id, name, relation, phone, is_primary) VALUES
-      (v_parent, 'Dhanshree', 'Daughter', '+91 90xxxxxx45', true),
-      (v_parent, 'Jenish', 'Son', '+91 90xxxxxx46', false);
-  END IF;
-
-  -- medications
-  IF NOT EXISTS (SELECT 1 FROM medications WHERE parent_id = v_parent) THEN
-    INSERT INTO medications (parent_id, name, dosage, slot_morning, slot_afternoon, slot_night, notes) VALUES
-      (v_parent, 'Metformin',   '500mg', true,  true,  false, 'After food'),
-      (v_parent, 'Telmisartan', '40mg',  true,  false, false, 'For BP'),
-      (v_parent, 'Vitamin D3',  '60k IU',false, false, true,  'Weekly, Sunday'),
-      (v_parent, 'Atorvastatin','10mg',  false, false, true,  'At bedtime');
-  END IF;
-
-  -- one daily log for today
-  IF NOT EXISTS (SELECT 1 FROM daily_logs WHERE parent_id = v_parent AND log_date = CURRENT_DATE) THEN
-    INSERT INTO daily_logs (parent_id, log_date, mood, ate_well, sleep_quality, bp, sugar, notes, family_update)
-    VALUES (v_parent, CURRENT_DATE, 'happy', 'yes', 'good', '128/82', '118',
-      'Had a good morning walk, ate full breakfast, watched the news and asked about the grandchildren.',
-      'Papa had a lovely day today — a full breakfast, a morning walk, and he was in great spirits watching the news. His BP and sugar are both steady. He asked about the grandchildren. 💛');
-  END IF;
-END $$;
-
 -- ── Care team: the people looking after the parent ─────────────
 CREATE TABLE IF NOT EXISTS care_team (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -269,24 +188,6 @@ SELECT * FROM (VALUES
 WHERE NOT EXISTS (SELECT 1 FROM activities);
 
 -- ── Seed care team + a sample booking (only if empty) ──────────
-DO $$
-DECLARE v_parent UUID;
-BEGIN
-  SELECT id INTO v_parent FROM parents ORDER BY created_at LIMIT 1;
-  IF v_parent IS NULL THEN RETURN; END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM care_team WHERE parent_id = v_parent) THEN
-    INSERT INTO care_team (parent_id, name, role, phone, since, rating) VALUES
-      (v_parent, 'Ramu Kaka',      'caregiver',       '+91 90xxxxxx11', '2025-09-01', 4.9),
-      (v_parent, 'Meena (Physio)', 'physiotherapist', '+91 90xxxxxx22', '2026-02-15', 4.8);
-  END IF;
-
-  IF NOT EXISTS (SELECT 1 FROM service_requests WHERE parent_id = v_parent) THEN
-    INSERT INTO service_requests (parent_id, service_type, frequency, preferred_date, notes, status) VALUES
-      (v_parent, 'physiotherapist', 'weekly', 'Every Saturday, 10 AM', 'Knee strengthening follow-up', 'confirmed');
-  END IF;
-END $$;
-
 -- richer booking fields (migration 003)
 ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS service_slug TEXT;
 ALTER TABLE service_requests ADD COLUMN IF NOT EXISTS preferred_time TEXT;
@@ -317,21 +218,10 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 --   role: 'admin'  = full control (family owner)
 --         'member' = view + book + chat (siblings/relatives)
 --         'caregiver' = daily log + mark medicines only (the helper)
-CREATE TABLE IF NOT EXISTS family_members (
-  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  parent_id  UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
-  role       TEXT NOT NULL DEFAULT 'member',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, parent_id)
-);
-CREATE INDEX IF NOT EXISTS idx_fm_user ON family_members(user_id);
-CREATE INDEX IF NOT EXISTS idx_fm_parent ON family_members(parent_id);
-
 -- ── who created each parent (nullable, set when created via app) ─
 ALTER TABLE parents ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id);
 
--- Note: the default admin user + linking existing parents happens in code
+-- Note: the default admin user + linking existing persons happens in code
 -- (src/auth.js ensureSeed) so we can scrypt-hash the password.
 
 CREATE TABLE IF NOT EXISTS alerts (
@@ -364,18 +254,6 @@ CREATE TABLE IF NOT EXISTS appointments (
 CREATE INDEX IF NOT EXISTS idx_appt_parent_date ON appointments(parent_id, appt_date);
 
 -- seed a couple for the demo parent
-DO $$
-DECLARE v_parent UUID;
-BEGIN
-  SELECT id INTO v_parent FROM parents ORDER BY created_at LIMIT 1;
-  IF v_parent IS NULL THEN RETURN; END IF;
-  IF NOT EXISTS (SELECT 1 FROM appointments WHERE parent_id=v_parent) THEN
-    INSERT INTO appointments (parent_id, kind, title, with_whom, appt_date, appt_time, location, notes) VALUES
-      (v_parent, 'appointment', 'Diabetes follow-up', 'Dr. A. Mehta', CURRENT_DATE + 5, '11:30 AM', 'Apollo Clinic', 'Carry the June blood report'),
-      (v_parent, 'reminder', 'Vitamin D recheck', 'Lab test', CURRENT_DATE + 20, NULL, 'At home collection', 'Was low in January, recheck due');
-  END IF;
-END $$;
-
 -- ── users can be onboarded (filled their intake) ────────────────
 ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false;
 
@@ -587,29 +465,7 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS has_media  BOOLEAN NOT NULL DEFAUL
 --
 -- Idempotent. Run: psql -d parentfirst_vault -f db/migrations/016_households.sql
 
-CREATE TABLE IF NOT EXISTS households (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  name        TEXT NOT NULL,
-  invite_code TEXT UNIQUE NOT NULL,
-  created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS household_members (
-  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
-  user_id      UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  care_role    TEXT NOT NULL DEFAULT 'carer',   -- 'elder' | 'carer'
-  is_owner     BOOLEAN NOT NULL DEFAULT false,  -- can rename, invite, set roles
-  joined_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (household_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_hm_household ON household_members(household_id);
-CREATE INDEX IF NOT EXISTS idx_hm_user ON household_members(user_id);
-
 -- a person record can belong to a household
-ALTER TABLE parents ADD COLUMN IF NOT EXISTS household_id UUID REFERENCES households(id) ON DELETE SET NULL;
-CREATE INDEX IF NOT EXISTS idx_parents_household ON parents(household_id);
 ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_role TEXT;
 
@@ -624,7 +480,7 @@ ALTER TABLE reports ADD COLUMN IF NOT EXISTS rx_meta JSONB;
 -- community: simple shared events for the household (satsang, walk, health camp)
 CREATE TABLE IF NOT EXISTS events (
   id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  household_id UUID NOT NULL REFERENCES households(id) ON DELETE CASCADE,
+  family_id    UUID,
   title        TEXT NOT NULL,
   event_date   DATE NOT NULL,
   event_time   TEXT,
@@ -633,7 +489,7 @@ CREATE TABLE IF NOT EXISTS events (
   created_by   UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-CREATE INDEX IF NOT EXISTS idx_events_household ON events(household_id, event_date);
+CREATE INDEX IF NOT EXISTS idx_events_family ON events(family_id, event_date);
 
 -- email ownership is now proven with a 6-digit code
 ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT false;
@@ -671,3 +527,92 @@ CREATE TABLE IF NOT EXISTS loop_marks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (day, kind, ref_id, slot)
 );
+
+-- ═══ canonical family architecture ═══
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_role TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+CREATE OR REPLACE VIEW persons AS SELECT * FROM parents;  -- refresh columns after ALTERs
+
+
+CREATE TABLE IF NOT EXISTS families (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS family_memberships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL DEFAULT 'CAREGIVER',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (family_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_fmem_user ON family_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_fmem_family ON family_memberships(family_id);
+CREATE TABLE IF NOT EXISTS persons_in_family (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  person_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (family_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS idx_pif_family ON persons_in_family(family_id);
+CREATE INDEX IF NOT EXISTS idx_pif_person ON persons_in_family(person_id);
+CREATE TABLE IF NOT EXISTS care_relationships (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  caregiver_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  person_id UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+  relationship TEXT,
+  permissions JSONB NOT NULL DEFAULT '{}',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (family_id, caregiver_user_id, person_id)
+);
+CREATE INDEX IF NOT EXISTS idx_care_user ON care_relationships(caregiver_user_id);
+CREATE INDEX IF NOT EXISTS idx_care_person ON care_relationships(person_id);
+CREATE TABLE IF NOT EXISTS invitations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  family_id UUID NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  invited_person_id UUID REFERENCES parents(id) ON DELETE SET NULL,
+  invited_email TEXT,
+  invited_phone TEXT,
+  invited_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  intended_role TEXT NOT NULL DEFAULT 'FAMILY_MEMBER',
+  intended_care BOOLEAN NOT NULL DEFAULT false,
+  token TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '14 days'),
+  accepted_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_inv_email ON invitations(lower(invited_email));
+CREATE INDEX IF NOT EXISTS idx_inv_family ON invitations(family_id);
+ALTER TABLE reports        ADD COLUMN IF NOT EXISTS uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE documents      ADD COLUMN IF NOT EXISTS uploaded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE vitals         ADD COLUMN IF NOT EXISTS recorded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE medication_log ADD COLUMN IF NOT EXISTS recorded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE appointments   ADD COLUMN IF NOT EXISTS created_by_user_id  UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE checkins       ADD COLUMN IF NOT EXISTS recorded_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_parents_user ON parents(user_id);
+
+ALTER TABLE events ADD CONSTRAINT events_family_fk FOREIGN KEY (family_id) REFERENCES families(id) ON DELETE CASCADE;
+
+-- ── backward-compatibility view ──────────────────────────────────────────
+-- The codebase historically read family_members(user_id, parent_id, role).
+-- That table is gone; this view projects the new graph into the old shape so
+-- existing queries keep working while routes are migrated incrementally.
+CREATE OR REPLACE VIEW family_members AS
+  SELECT cr.id, cr.caregiver_user_id AS user_id, cr.person_id AS parent_id,
+         CASE WHEN (cr.permissions->>'MANAGE_MEDICINES')::boolean THEN 'admin' ELSE 'member' END AS role
+  FROM care_relationships cr
+  UNION
+  SELECT p.id, p.user_id, p.id AS parent_id, 'dependent' AS role
+  FROM persons p WHERE p.user_id IS NOT NULL;
+

@@ -722,6 +722,17 @@
     <input class="chat-input" id="authPassword" type="password" placeholder="••••••••" style="background:var(--white);width:100%;" onkeydown="if(event.key==='Enter')submitAuth()">
     <div id="authErr"></div>
     <button class="btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem;" id="authBtn" onclick="submitAuth()">Sign in</button>
+    <!-- OTP lives INSIDE the card. Not a modal: nothing can render on top of it. -->
+    <div id="otpStep" style="display:none;margin-top:1.25rem;padding-top:1.25rem;border-top:1px solid var(--border);">
+      <div id="otpSentMsg" style="background:var(--sage-light);color:var(--sage);border-radius:10px;padding:10px 12px;font-size:13px;margin-bottom:0.9rem;"></div>
+      <label class="dl-label">Enter the 6-digit code</label>
+      <input class="chat-input" id="otpCode" maxlength="6" inputmode="numeric" autocomplete="one-time-code"
+             placeholder="000000" style="background:var(--white);width:100%;font-size:24px;letter-spacing:10px;text-align:center;"
+             onkeydown="if(event.key==='Enter')submitOtp()">
+      <div id="otpErr"></div>
+      <button class="btn-primary" style="width:100%;justify-content:center;margin-top:0.9rem;" id="otpVerifyBtn" onclick="submitOtp()">Verify &amp; continue</button>
+      <button class="btn-out" style="width:100%;justify-content:center;margin-top:0.6rem;" id="otpResendBtn" onclick="resendOtp()">Send the code again</button>
+    </div>
     <p style="text-align:center;font-size:13px;color:var(--ink-muted);margin-top:1rem;">
       <span id="authToggleText">New here?</span>
       <a href="#" onclick="toggleAuthMode();return false;" style="color:var(--rust);font-weight:500;" id="authToggleLink">Create an account</a>
@@ -1341,73 +1352,114 @@ function toggleAuthMode(){
   document.getElementById('authToggleLink').textContent = signup ? 'Sign in' : 'Create an account';
   document.getElementById('authErr').innerHTML = '';
 }
+let AUTH_BUSY=false;          // blocks double-submits (your bug #2: many clicks = many emails)
+let OTP_COOLDOWN=0;           // seconds left before another code may be sent
+let OTP_TIMER=null;
+
+function setAuthErr(msg){ document.getElementById('authErr').innerHTML = msg? '<div class="err-box">'+esc(msg)+'</div>' : ''; }
+function setOtpErr(msg){ const e=document.getElementById('otpErr'); if(e) e.innerHTML = msg? '<div class="err-box">'+esc(msg)+'</div>' : ''; }
+
+// Shows the inline OTP panel and starts the 60-second resend cooldown.
+function showOtpStep(email){
+  VERIFY_CTX = { email, password: document.getElementById('authPassword').value };
+  document.getElementById('otpStep').style.display='block';
+  document.getElementById('otpSentMsg').textContent = 'We sent a 6-digit code to ' + email + '. It works for 10 minutes.';
+  // the signup fields are done with; hide the primary button so there is one obvious next action
+  document.getElementById('authBtn').style.display='none';
+  setAuthErr('');
+  setTimeout(()=>{ const f=document.getElementById('otpCode'); if(f) f.focus(); },60);
+  startOtpCooldown(60);
+}
+function startOtpCooldown(sec){
+  OTP_COOLDOWN = sec;
+  const btn=document.getElementById('otpResendBtn');
+  clearInterval(OTP_TIMER);
+  const tick=()=>{
+    if(!btn) return;
+    if(OTP_COOLDOWN<=0){ clearInterval(OTP_TIMER); btn.disabled=false; btn.textContent='Send the code again'; return; }
+    btn.disabled=true; btn.textContent='Send again in '+OTP_COOLDOWN+'s';
+    OTP_COOLDOWN--;
+  };
+  tick(); OTP_TIMER=setInterval(tick,1000);
+}
+function resetAuthCard(){
+  clearInterval(OTP_TIMER);
+  const st=document.getElementById('otpStep'); if(st) st.style.display='none';
+  const b=document.getElementById('authBtn'); if(b){ b.style.display=''; b.disabled=false; }
+  setOtpErr(''); setAuthErr('');
+  const c=document.getElementById('otpCode'); if(c) c.value='';
+  VERIFY_CTX=null; AUTH_BUSY=false;
+}
+
 async function submitAuth(){
+  if(AUTH_BUSY) return;                       // one request at a time — no email storms
   const email=document.getElementById('authEmail').value.trim();
   const password=document.getElementById('authPassword').value;
   const name=document.getElementById('authName').value.trim();
-  const errBox=document.getElementById('authErr');
-  errBox.innerHTML='';
-  if(!email||!password){ errBox.innerHTML='<div class="err-box">Email and password are required.</div>'; return; }
-  const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
+  setAuthErr('');
+  if(!email||!password){ setAuthErr('Email and password are required.'); return; }
+  if(AUTH_MODE==='signup' && !name){ setAuthErr('Please tell us your name.'); return; }
+  if(AUTH_MODE==='signup' && password.length<8){ setAuthErr('Password must be at least 8 characters.'); return; }
+
+  const btn=document.getElementById('authBtn');
+  AUTH_BUSY=true; btn.disabled=true;
+  const original=btn.textContent;
+  btn.textContent = AUTH_MODE==='signup' ? 'Sending code…' : 'Signing in…';
+
   const roleBtn = document.querySelector('#authRole .dchip.sel');
-  if(AUTH_MODE==='signup') window._signupRole = roleBtn ? roleBtn.dataset.val : 'carer';
-  const body = AUTH_MODE==='signup' ? {email,password,name} : {email,password};
+  const signup_role = roleBtn ? roleBtn.dataset.val : 'carer';
+  const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
+  const body = AUTH_MODE==='signup' ? {email,password,name,signup_role} : {email,password};
   try{
-    const r = await fetch(API+path, {method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const r = await fetch(API+path, {method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const t = await r.json().catch(()=>({}));
-    if(t.needs_verify){
-      // account exists; the email isn't proven yet — a code is on its way
-      openVerify(t.email || email, password);
-      return;
-    }
+    // unverified account (new signup, or a login on one) -> the code is on its way
+    if(t.needs_verify){ showOtpStep(t.email || email); return; }
     if(!r.ok) throw new Error(t.error||'Something went wrong');
-    hideAuth();
+    resetAuthCard();
     document.getElementById('authPassword').value='';
     await boot();
-  }catch(e){ errBox.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
+  }catch(e){ setAuthErr(e.message); }
+  finally{
+    AUTH_BUSY=false;
+    if(btn){ btn.disabled=false; btn.textContent=original; }
+  }
 }
 
-// ═══════════ EMAIL VERIFICATION (OTP) ═══════════
-// The code proves the address; after that, login proceeds with the password
-// they just typed — no second form.
+// ═══════════ EMAIL VERIFICATION (OTP) — inline, in the auth card ═══════════
 let VERIFY_CTX=null;
-function openVerify(email, password){
-  VERIFY_CTX={email, password};
-  const bg=document.createElement('div'); bg.className='modal-bg open'; bg.id='otpModal';
-  // this opens while the auth overlay (z-index 1000) is covering the screen —
-  // pin it above explicitly so it can never render behind the signup card.
-  bg.style.cssText='display:flex;position:fixed;inset:0;z-index:2000;align-items:center;justify-content:center;padding:1.5rem;background:rgba(26,23,20,0.5);';
-  bg.innerHTML='<div class="modal" style="max-width:420px;">'
-    + '<h2>Check your email</h2>'
-    + '<p class="msub">We sent a 6-digit code to <b>'+esc(email)+'</b>. It works for 10 minutes.</p>'
-    + '<input class="chat-input" id="otpCode" placeholder="6-digit code" maxlength="6" inputmode="numeric" style="background:var(--white);font-size:22px;letter-spacing:8px;text-align:center;">'
-    + '<div id="otpErr"></div>'
-    + '<div class="modal-actions" style="justify-content:space-between;">'
-    + '<button class="btn-out" onclick="resendOtp()">Send again</button>'
-    + '<button class="btn-primary" onclick="submitOtp()">Confirm</button></div></div>';
-  document.body.appendChild(bg);
-  setTimeout(()=>document.getElementById('otpCode').focus(),50);
-  document.getElementById('otpCode').addEventListener('keydown',e=>{ if(e.key==='Enter') submitOtp(); });
-}
 async function submitOtp(){
-  const code=document.getElementById('otpCode').value.trim();
-  const err=document.getElementById('otpErr');
-  if(code.length!==6){ err.innerHTML='<div class="err-box">Enter the 6-digit code.</div>'; return; }
+  if(AUTH_BUSY) return;
+  const code=(document.getElementById('otpCode').value||'').trim();
+  setOtpErr('');
+  if(!/^[0-9]{6}$/.test(code)){ setOtpErr('Enter the 6-digit code from your email.'); return; }
+  if(!VERIFY_CTX){ setOtpErr('Start again — enter your details above.'); return; }
+  const btn=document.getElementById('otpVerifyBtn');
+  AUTH_BUSY=true; btn.disabled=true; btn.textContent='Checking…';
   try{
-    await j('/api/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:VERIFY_CTX.email, code})});
-    // verified — now log in with the password from the form
-    const r = await fetch(API+'/api/auth/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:VERIFY_CTX.email, password:VERIFY_CTX.password})});
-    if(!r.ok){ const t=await r.json().catch(()=>({})); throw new Error(t.error||'Verified! Now sign in.'); }
-    document.getElementById('otpModal').remove(); VERIFY_CTX=null;
-    hideAuth(); await boot();
+    await j('/api/auth/verify',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:VERIFY_CTX.email, code})});
+    // verified — log in with the password they typed, no second form
+    const pw = VERIFY_CTX.password || document.getElementById('authPassword').value;
+    const r = await fetch(API+'/api/auth/login',{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({email:VERIFY_CTX.email,password:pw})});
+    if(!r.ok){ const t=await r.json().catch(()=>({})); throw new Error(t.error||'Verified — please sign in.'); }
+    resetAuthCard();
+    await boot();
     toast('Email confirmed. Welcome!','success');
-  }catch(e){ err.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; }
+  }catch(e){ setOtpErr(e.message); }
+  finally{ AUTH_BUSY=false; if(btn){ btn.disabled=false; btn.textContent='Verify & continue'; } }
 }
 async function resendOtp(){
-  try{ await j('/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:VERIFY_CTX.email})});
-    toast('A fresh code is on its way.','success');
-  }catch(e){ toast(e.message,'error'); }
+  if(OTP_COOLDOWN>0 || !VERIFY_CTX) return;
+  try{
+    await j('/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:VERIFY_CTX.email})});
+    document.getElementById('otpSentMsg').textContent='A fresh code is on its way to '+VERIFY_CTX.email+'.';
+    setOtpErr('');
+    startOtpCooldown(60);
+  }catch(e){ setOtpErr(e.message); }
 }
 
 // ═══════════ FORGOT PASSWORD ═══════════
@@ -1569,6 +1621,22 @@ function renderVaultTabs(v){
   document.querySelectorAll('.vtab-host').forEach(h=>{ h.innerHTML = vaultTabs(h.dataset.tab); });
 }
 function nav_(v){
+  // Person-scoped screens cannot render without a person. Rather than throwing
+  // "cannot read properties of null", say what to do about it.
+  const NEEDS_PERSON = ['monitor','meds','vault','docs','timeline','compare','vitals','trends',
+                        'messages','emergency','team','details','appts','me','chat','daily','wellness'];
+  if(NEEDS_PERSON.includes(v) && !PARENT){
+    document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+    const host=document.getElementById('view-'+v);
+    if(host){
+      host.classList.add('active');
+      host.innerHTML='<div class="page-eyebrow">Set up first</div>'
+        + '<h1 class="pt">Add the person <em>you care for</em></h1>'
+        + '<p class="psub">This screen shows their medicines, readings and reports. Add them once and everything fills in.</p>'
+        + '<button class="btn-primary" style="margin-top:1rem;" onclick="startOnboarding()">Set up my family</button>';
+    }
+    return;
+  }
   document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
   const view=document.getElementById('view-'+v); if(view)view.classList.add('active');
   document.querySelectorAll('.side-btn[data-v]').forEach(b=>b.classList.remove('active'));
@@ -1631,36 +1699,37 @@ async function init(){
 // make sure the invite greeting appears even if the group lookup is slow or fails
 document.addEventListener('DOMContentLoaded', ()=>{ try{ renderInviteBanner(); }catch(e){} });
 async function boot(){
-  ME = await j('/api/me');
+  try{
+    ME = await j('/api/me');
+  }catch(e){ showAuth(); return; }
   hideAuth();
-  const app = document.querySelector('.app') || document.body;
-  // brand-new user → intake form
-  if(!ME.user.onboarded || !ME.parents.length){
+  // A user with no person record has nothing to show. Send them to onboarding
+  // rather than rendering an app whose every screen reads PARENT.id of null.
+  if(!ME || !ME.user || !ME.parents || !ME.parents.length || !ME.user.onboarded){
+    resetAuthCard();
     startOnboarding();
     return;
   }
   closeOnb();
-  // caregiver-only users get the simple surface
   if(ME.parents.length && ME.parents.every(p=>p.role==='caregiver')){
-    window.location.href='/caregiver';
-    return;
+    window.location.href='/caregiver'; return;
   }
-  // A carer opens the app to see the person they look after — not themselves.
-  // Their own vault is still there, one tap away in the switcher.
-  const mine = ME.parents.find(p => p.name === ME.user.name);
+  // A carer opens the app on the person they look after, not themselves.
+  const mine   = ME.parents.find(p => p.name === ME.user.name);
   const others = ME.parents.filter(p => p.name !== ME.user.name);
-  PARENT = (!ME.is_dependent && others.length) ? others[0] : (ME.parents[0] || mine);
-  IS_DEPENDENT = ME.is_dependent && PARENT.role==='dependent';
+  PARENT = (!ME.is_dependent && others.length) ? others[0] : (ME.parents[0] || mine || null);
+  if(!PARENT){ startOnboarding(); return; }        // last guard: never proceed with a null person
+  IS_DEPENDENT = !!(ME.is_dependent && PARENT.role==='dependent');
   applyDependentMode();
   paintParent();
-  await applyProfileAdaptations();
-  applyRoleUI();
-  await loadReports();
-  if(!IS_DEPENDENT) loadMonitor();
+  try{ await applyProfileAdaptations(); }catch(e){}
+  try{ applyRoleUI(); }catch(e){}
+  try{ await loadReports(); }catch(e){}
+  if(!IS_DEPENDENT){ try{ loadMonitor(); }catch(e){} }
   nav_(IS_DEPENDENT ? 'me' : 'monitor');
-  startReminders();
-  checkFamilyPrompt();
-  enablePush();
+  try{ startReminders(); }catch(e){}
+  try{ checkFamilyPrompt(); }catch(e){}
+  try{ enablePush(); }catch(e){}
 }
 
 // ═══════════ ONBOARDING WIZARD ═══════════
