@@ -734,6 +734,7 @@
       <div id="otpErr"></div>
       <button class="btn-primary" style="width:100%;justify-content:center;margin-top:0.9rem;" id="otpVerifyBtn" onclick="submitOtp()">Verify &amp; continue</button>
       <button class="btn-out" style="width:100%;justify-content:center;margin-top:0.6rem;" id="otpResendBtn" onclick="resendOtp()">Send the code again</button>
+      <button class="btn-out" style="width:100%;justify-content:center;margin-top:0.6rem;border-style:dashed;" onclick="editEmailRestart()">Wrong email? Edit it and resend</button>
     </div>
     <p style="text-align:center;font-size:13px;color:var(--ink-muted);margin-top:1rem;">
       <span id="authToggleText">New here?</span>
@@ -1335,9 +1336,11 @@ function renderInviteBanner(){
     try{ toggleAuthMode(); }catch(e){}
   }
   const h=window._pfInviteFrom;
-  b.innerHTML='<div class="inv-banner">&#128075; You\'ve been invited to join <b>'+esc(h?h.name:'a family group')+'</b>'
-    + (h?' ('+h.member_count+' member'+(h.member_count===1?'':'s')+')':'')
-    + '. Sign up and you\'ll be added automatically.</div>';
+  const fam = h && (h.family_name || h.name);
+  const by  = h && h.invited_by;
+  b.innerHTML='<div class="inv-banner">&#128075; '
+    + (by ? esc(by)+' has invited you to join ' : 'You\'ve been invited to join ')
+    + '<b>'+esc(fam || 'their family')+'</b> on ParentFirst. Sign up and you\'ll be added automatically.</div>';
 }
 function showAuth(){ document.getElementById('authOverlay').classList.add('open');
   renderInviteBanner(); }
@@ -1349,7 +1352,7 @@ function toggleAuthMode(){
   document.getElementById('authTitle').textContent = signup ? 'Create your account' : 'Welcome back';
   document.getElementById('authSub').textContent = signup ? 'Start your family\'s care space.' : 'Sign in to your family\'s care space.';
   document.getElementById('authNameWrap').style.display = signup ? 'block' : 'none';
-  document.getElementById('authBtn').textContent = signup ? 'Create account' : 'Sign in';
+  document.getElementById('authBtn').textContent = signup ? 'Send verification code' : 'Sign in';
   document.getElementById('authToggleText').textContent = signup ? 'Already have an account?' : 'New here?';
   document.getElementById('authToggleLink').textContent = signup ? 'Sign in' : 'Create an account';
   document.getElementById('authErr').innerHTML = '';
@@ -1364,6 +1367,20 @@ function setOtpErr(msg){ const e=document.getElementById('otpErr'); if(e) e.inne
 // Shows the inline OTP panel and starts the 60-second resend cooldown.
 function showOtpStep(email){
   VERIFY_CTX = { email, password: document.getElementById('authPassword').value };
+  // if they edit the email while the code panel is open, restart the flow —
+  // otherwise a typo (code sent to the wrong address) dead-ends until reload
+  if(!window._emailWatch){
+    window._emailWatch = true;
+    const f=document.getElementById('authEmail');
+    if(f) f.addEventListener('input', function(){
+      const st=document.getElementById('otpStep');
+      if(st && st.style.display!=='none' && VERIFY_CTX &&
+         f.value.trim().toLowerCase() !== String(VERIFY_CTX.email||'').toLowerCase()){
+        resetAuthCard();
+        setAuthErr('Email changed \u2014 press \u201CSend verification code\u201D when it\u2019s right.');
+      }
+    });
+  }
   document.getElementById('otpStep').style.display='block';
   document.getElementById('otpSentMsg').textContent = 'We sent a 6-digit code to ' + email + '. It works for 10 minutes.';
   // the signup fields are done with; hide the primary button so there is one obvious next action
@@ -1383,6 +1400,12 @@ function startOtpCooldown(sec){
     OTP_COOLDOWN--;
   };
   tick(); OTP_TIMER=setInterval(tick,1000);
+}
+function editEmailRestart(){
+  resetAuthCard();
+  const f=document.getElementById('authEmail');
+  if(f){ f.focus(); try{ f.select(); }catch(e){} }
+  setAuthErr('Fix the email above, then press \u201CSend verification code\u201D again.');
 }
 function resetAuthCard(){
   clearInterval(OTP_TIMER);
@@ -1706,6 +1729,14 @@ async function boot(){
     ME = await j('/api/me');
   }catch(e){ showAuth(); return; }
   hideAuth();
+  // An invited person joins their family FIRST — before any onboarding decision.
+  // Accepting gives them the family + its people, so the wizard never appears.
+  const pendingInvite = sessionStorage.getItem('pf_join_code');
+  if(pendingInvite && ME && ME.user){
+    sessionStorage.removeItem('pf_join_code');
+    await acceptInviteToken(pendingInvite);
+    try{ ME = await j('/api/me'); }catch(e){}
+  }
   // A user with no person record has nothing to show. Send them to onboarding
   // rather than rendering an app whose every screen reads PARENT.id of null.
   if(!ME || !ME.user || !ME.parents || !ME.parents.length || !ME.user.onboarded){
@@ -3217,7 +3248,9 @@ async function loadFamily(){
     + '</div>';
   const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc((m.name||'?')[0])+'</div>'
     + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
-    + '<div class="fam-meta">'+esc(m.email)+' · '+esc((m.role||'').toLowerCase())+'</div></div></div>';
+    + '<div class="fam-meta">'+esc(m.email)+' · '+esc(roleLabel(m.role))+'</div></div>'
+    + (isOwner && m.user_id!==ME.user.id ? '<button class="fam-swap" onclick="removeMember(\''+fam.id+'\',\''+m.user_id+'\',\''+esc(m.name)+'\')">Remove</button>':'')
+    + '</div>';
   body.innerHTML = head
     + '<div class="fam-sec"><h4>People we care for <span class="fam-n">'+persons.length+'</span></h4>'
     + (persons.length? persons.map(pCard).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — add the first person.</div>')
@@ -3230,9 +3263,39 @@ async function loadFamily(){
         + '<button class="fam-swap" onclick="copyInviteLink(\''+i.token+'\')">Copy link</button></div>').join('')
     + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="inviteMember(\''+fam.id+'\')">+ Invite a family member</button>':'')
     + '</div>'
+    + (isOwner && persons.length===0 ? '<button class="btn-out" style="margin-top:0.8rem;color:var(--red);border-color:var(--red);" onclick="deleteFamily(\''+fam.id+'\',\''+esc(fam.name)+'\')">Delete this empty family</button>' : '')
     + '<div class="disclaimer">Everyone in a family can see the vaults of those being cared for. A caregiver\'s own vault stays private to them.</div>';
 }
-async function switchFamily(id){ ACTIVE_FAMILY=id; loadFamily(); }
+const ROLE_LABELS={OWNER:'owner',CAREGIVER:'caregiver',FAMILY_MEMBER:'family member',CARE_RECIPIENT:'cared for',LOCAL_CAREGIVER:'local caregiver',DOCTOR:'doctor'};
+function roleLabel(r){ return ROLE_LABELS[r] || String(r||'').toLowerCase().replace(/_/g,' '); }
+async function switchFamily(id){
+  ACTIVE_FAMILY=id;
+  // switching family also switches WHO you're looking at — header and pages follow
+  try{
+    const ppl=(await j('/api/families/'+id+'/persons')).persons;
+    if(ppl && ppl.length){
+      const match=(ME.parents||[]).find(p=>p.id===ppl[0].id);
+      if(match){ PARENT=match; paintParent(); }
+    }
+  }catch(e){}
+  loadFamily();
+}
+async function removeMember(familyId, userId, name){
+  if(!confirm('Remove '+name+' from this family? They lose access to everyone in it.')) return;
+  try{
+    await j('/api/families/'+familyId+'/members/'+userId,{method:'DELETE'});
+    toast(name+' removed.','success');
+    ME=await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function deleteFamily(familyId, name){
+  if(!confirm('Delete "'+name+'"? Only possible when it has no people in it.')) return;
+  try{
+    await j('/api/families/'+familyId,{method:'DELETE'});
+    toast('Family deleted.','success');
+    ACTIVE_FAMILY=null; ME=await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
+}
 function copyInviteLink(token){
   const link=inviteLink(token);
   if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(()=>toast('Invite link copied.','success')).catch(()=>prompt('Copy this link:',link)); }
@@ -3240,7 +3303,28 @@ function copyInviteLink(token){
 }
 async function acceptInviteToken(token){
   try{
-    const r = await j('/api/invitations/'+encodeURIComponent(token)+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    // A person-bound invite claims that person's health record. Make the
+    // accepter confirm who they are before anything links.
+    let asMember=false;
+    try{
+      const peek = await j('/api/invitations/'+encodeURIComponent(token)+'/peek');
+      if(peek && peek.person_name){
+        asMember = !(await new Promise(res=>{
+          const bg=document.createElement('div'); bg.className='modal-bg open';
+          bg.style.cssText='display:flex;position:fixed;inset:0;z-index:2000;align-items:center;justify-content:center;padding:1.5rem;background:rgba(26,23,20,0.5);';
+          bg.innerHTML='<div class="modal" style="max-width:430px;"><h2>Who is this invite for?</h2>'
+            + '<p class="msub">This invitation is for <b>'+esc(peek.person_name)+'</b> to claim their own health record in '+esc(peek.family_name||'the family')+'.</p>'
+            + '<div class="modal-actions" style="flex-direction:column;gap:0.6rem;">'
+            + '<button class="btn-primary" style="width:100%;justify-content:center;" id="invYes">I am '+esc(peek.person_name)+'</button>'
+            + '<button class="btn-out" style="width:100%;justify-content:center;" id="invNo">I\'m a family member helping out</button>'
+            + '</div></div>';
+          bg.querySelector('#invYes').onclick=()=>{ bg.remove(); res(true); };
+          bg.querySelector('#invNo').onclick=()=>{ bg.remove(); res(false); };
+          document.body.appendChild(bg);
+        }));
+      }
+    }catch(e){}
+    const r = await j('/api/invitations/'+encodeURIComponent(token)+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({as_member:asMember})});
     ACTIVE_FAMILY = r.family_id;
     toast('You\'ve joined the family.','success');
     ME = await j('/api/me');

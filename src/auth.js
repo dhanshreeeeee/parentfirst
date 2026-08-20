@@ -255,10 +255,20 @@ async function authPluginImpl(app, { pool }) {
   app.get('/api/me', async (req, reply) => {
     if (!req.user) return reply.code(401).send({ error: 'not authenticated' });
     const { rows: u } = await pool.query('SELECT onboarded, signup_role FROM users WHERE id=$1', [req.user.id]);
+    // everyone visible to this user through FAMILY MEMBERSHIP — a member who
+    // has no care relationship yet (a just-joined sibling) still sees the family
     const { rows: parents } = await pool.query(
-      `SELECT p.*, fm.role FROM family_members fm
-       JOIN parents p ON p.id = fm.parent_id
-       WHERE fm.user_id=$1 ORDER BY p.created_at`, [req.user.id]);
+      `SELECT DISTINCT p.*, f.id AS family_id, f.name AS family_name,
+              CASE WHEN p.user_id=$1 THEN 'dependent'
+                   WHEN cr.caregiver_user_id IS NOT NULL AND (cr.permissions->>'MANAGE_MEDICINES')::boolean THEN 'admin'
+                   WHEN cr.caregiver_user_id IS NOT NULL THEN 'member'
+                   ELSE 'member' END AS role
+       FROM parents p
+       JOIN persons_in_family pif ON pif.person_id=p.id
+       JOIN families f ON f.id=pif.family_id
+       JOIN family_memberships fm ON fm.family_id=f.id AND fm.user_id=$1 AND fm.status='ACTIVE'
+       LEFT JOIN care_relationships cr ON cr.person_id=p.id AND cr.caregiver_user_id=$1
+       ORDER BY p.created_at`, [req.user.id]);
     // families the user belongs to (for the switcher)
     const { rows: families } = await pool.query(
       `SELECT f.id, f.name, m.role,

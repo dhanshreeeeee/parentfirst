@@ -98,7 +98,8 @@ export async function createInvitation(pool, { familyId, invitedPersonId, email,
 
 // Accept an invitation for a given user — the whole linking happens atomically,
 // with a row lock so two simultaneous accepts can't both win.
-export async function acceptInvitation(pool, token, acceptingUserId) {
+export async function acceptInvitation(pool, token, acceptingUserId, opts = {}) {
+  const asMember = !!opts.asMember;   // "I'm not this person — add me as family instead"
   return withTx(pool, async (c) => {
     const { rows: [inv] } = await c.query(
       `SELECT * FROM invitations WHERE token=$1 FOR UPDATE`, [token]);
@@ -108,12 +109,14 @@ export async function acceptInvitation(pool, token, acceptingUserId) {
       await c.query(`UPDATE invitations SET status='EXPIRED' WHERE id=$1`, [inv.id]);
       throw httpErr(409, 'this invitation has expired');
     }
-    // 1. membership into the family
+    // 1. membership into the family (a person-bound invite used by someone
+    //    else becomes a FAMILY_MEMBER, never a CARE_RECIPIENT)
+    const role = asMember && inv.intended_role === 'CARE_RECIPIENT' ? 'FAMILY_MEMBER' : inv.intended_role;
     await c.query(
       `INSERT INTO family_memberships (family_id, user_id, role) VALUES ($1,$2,$3)
-       ON CONFLICT (family_id, user_id) DO NOTHING`, [inv.family_id, acceptingUserId, inv.intended_role]);
-    // 2. if this invite was for an existing person (Papa), link that person to this login
-    if (inv.invited_person_id) {
+       ON CONFLICT (family_id, user_id) DO NOTHING`, [inv.family_id, acceptingUserId, role]);
+    // 2. link the invited person's record ONLY when the accepter confirms they ARE that person
+    if (inv.invited_person_id && !asMember) {
       await c.query(
         `UPDATE persons SET user_id=$2 WHERE id=$1 AND user_id IS NULL`, [inv.invited_person_id, acceptingUserId]);
     }
@@ -125,6 +128,9 @@ export async function acceptInvitation(pool, token, acceptingUserId) {
         [inv.family_id, acceptingUserId, inv.invited_person_id, JSON.stringify(DEFAULT_CAREGIVER_PERMS)]);
     }
     await c.query(`UPDATE invitations SET status='ACCEPTED', accepted_by_user_id=$2 WHERE id=$1`, [inv.id, acceptingUserId]);
+    // joining a family IS onboarding — never send an invited person through
+    // the "create your family" wizard afterwards
+    await c.query(`UPDATE users SET onboarded=true WHERE id=$1`, [acceptingUserId]);
     return inv;
   });
 }

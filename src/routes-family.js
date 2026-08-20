@@ -110,7 +110,7 @@ export default async function familyRoutes(app, { pool }) {
   // ── accept an invitation (must be logged in) ──
   app.post('/api/invitations/:token/accept', { config: {}, }, async (req, reply) => {
     try {
-      const inv = await acceptInvitation(pool, req.params.token, uid(req));
+      const inv = await acceptInvitation(pool, req.params.token, uid(req), { asMember: !!(req.body && req.body.as_member) });
       return { accepted: true, family_id: inv.family_id };
     } catch (e) {
       return reply.code(e.statusCode || 400).send({ error: e.message });
@@ -238,5 +238,36 @@ export default async function familyRoutes(app, { pool }) {
        WHERE i.family_id=$1 AND i.status='PENDING' AND i.expires_at > now()
        ORDER BY i.created_at DESC`, [req.params.familyId]);
     return { invitations: rows };
+  });
+
+  // ── owner removes a member (not themselves; fixes wrong-role/wrong-person joins) ──
+  app.delete('/api/families/:familyId/members/:userId', async (req, reply) => {
+    const owner = await pool.query(
+      `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role='OWNER'`,
+      [req.params.familyId, uid(req)]);
+    if (!owner.rows[0]) return reply.code(403).send({ error: 'only the owner can remove members' });
+    if (req.params.userId === uid(req)) return reply.code(400).send({ error: 'the owner cannot remove themselves' });
+    await pool.query(`DELETE FROM care_relationships WHERE family_id=$1 AND caregiver_user_id=$2`,
+      [req.params.familyId, req.params.userId]);
+    await pool.query(`DELETE FROM family_memberships WHERE family_id=$1 AND user_id=$2`,
+      [req.params.familyId, req.params.userId]);
+    // if they had claimed a person record in this family, release it
+    await pool.query(
+      `UPDATE parents SET user_id=NULL WHERE user_id=$1 AND id IN
+         (SELECT person_id FROM persons_in_family WHERE family_id=$2)`,
+      [req.params.userId, req.params.familyId]);
+    return { removed: true };
+  });
+
+  // ── owner deletes a family that has no people in it (cleans up empty duplicates) ──
+  app.delete('/api/families/:familyId', async (req, reply) => {
+    const owner = await pool.query(
+      `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role='OWNER'`,
+      [req.params.familyId, uid(req)]);
+    if (!owner.rows[0]) return reply.code(403).send({ error: 'only the owner can delete a family' });
+    const ppl = await pool.query(`SELECT count(*)::int c FROM persons_in_family WHERE family_id=$1`, [req.params.familyId]);
+    if (ppl.rows[0].c > 0) return reply.code(400).send({ error: 'remove the people in this family first' });
+    await pool.query(`DELETE FROM families WHERE id=$1`, [req.params.familyId]);
+    return { deleted: true };
   });
 }
