@@ -68,7 +68,30 @@ export default async function familyRoutes(app, { pool }) {
       familyId: req.params.familyId, invitedPersonId: person_id || null,
       email, phone, byUserId: uid(req), role: role || 'FAMILY_MEMBER', intendedCare: !!intended_care,
     });
-    return { invitation: { token: inv.token, status: inv.status, expires_at: inv.expires_at } };
+    // email the invite link so "enter their email" actually reaches them
+    let emailed = false;
+    if (email) {
+      try {
+        const { rows: [fam] } = await pool.query('SELECT name FROM families WHERE id=$1', [req.params.familyId]);
+        const { rows: [inviter] } = await pool.query('SELECT name FROM users WHERE id=$1', [uid(req)]);
+        const base = process.env.APP_URL || 'https://parentfirst.onrender.com';
+        const link = base + '/?invite=' + inv.token;
+        const { notifyPeople } = await import('./notify.js');
+        await notifyPeople(app, [email.toLowerCase()],
+          (inviter?.name || 'Your family') + ' invited you to ' + (fam?.name || 'their family') + ' on ParentFirst',
+          [
+            (inviter?.name || 'Someone') + ' is inviting you to join ' + (fam?.name || 'their family') + ' on ParentFirst,',
+            'a private space where your family looks after each other\'s health together.',
+            '',
+            'Open this link, create your account, and you\'re in:',
+            link,
+            '',
+            'The link works for 14 days. If this wasn\'t meant for you, just ignore it.',
+          ]);
+        emailed = true;
+      } catch (e) { req.log.error('invite email: ' + e.message); }
+    }
+    return { invitation: { token: inv.token, status: inv.status, expires_at: inv.expires_at, emailed } };
   });
 
   // ── public: peek at an invitation (what family am I being asked to join?) ──
@@ -199,5 +222,21 @@ export default async function familyRoutes(app, { pool }) {
       });
     }
     return { family_id: fid, date: today, persons: cards };
+  });
+
+  // ── list invitations for a family (drives the "invite sent — waiting" state) ──
+  app.get('/api/families/:familyId/invitations', async (req, reply) => {
+    const m = await pool.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`,
+      [req.params.familyId, uid(req)]);
+    if (!m.rows[0]) return reply.code(403).send({ error: 'not a member' });
+    const { rows } = await pool.query(
+      `SELECT i.id, i.token, i.status, i.invited_email, i.invited_person_id, i.intended_role,
+              i.created_at, i.expires_at, p.name AS person_name, u.name AS invited_by
+       FROM invitations i
+       LEFT JOIN persons p ON p.id=i.invited_person_id
+       LEFT JOIN users u ON u.id=i.invited_by_user_id
+       WHERE i.family_id=$1 AND i.status='PENDING' AND i.expires_at > now()
+       ORDER BY i.created_at DESC`, [req.params.familyId]);
+    return { invitations: rows };
   });
 }

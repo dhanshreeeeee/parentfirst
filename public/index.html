@@ -675,6 +675,8 @@
   .pcard-row.good{ color:var(--sage); }
   .pcard-row.warn{ color:#9a7508; }
   .pcard-alert{ margin-top:0.6rem; font-size:12.5px; font-weight:600; color:var(--red); background:var(--red-light); border-radius:8px; padding:5px 9px; }
+
+  .fam-invited{ font-size:11px; background:var(--gold-light); color:#7a5a08; border-radius:10px; padding:2px 9px; font-weight:600; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -1527,7 +1529,8 @@ function renderParentMenu(){
   if(pick) pick.style.pointerEvents='';
   let html='<div class="pick-head">Switch person</div>';
   for(const p of ME.parents){
-    html += '<button class="pick-item '+(PARENT&&p.id===PARENT.id?'active':'')+'" onclick="switchParent(\''+p.id+'\')"><span class="pick-av">'+esc(p.name[0])+'</span>'+esc(p.name)+'<span class="pick-role">'+esc(p.role)+'</span></button>';
+    const tag = p.user_id===ME.user.id ? 'you' : (p.relation && p.relation!=='self' ? p.relation : 'cared for');
+    html += '<button class="pick-item '+(PARENT&&p.id===PARENT.id?'active':'')+'" onclick="switchParent(\''+p.id+'\')"><span class="pick-av">'+esc(p.name[0])+'</span>'+esc(p.name)+'<span class="pick-role">'+esc(tag)+'</span></button>';
   }
   html += '<div class="pick-div"></div><button class="pick-item" onclick="goFamily()"><span class="pick-av">+</span>Family group</button>';
   menu.innerHTML=html;
@@ -3194,14 +3197,23 @@ async function loadFamily(){
       '<button class="fam-chip'+(f.id===fam.id?' on':'')+'" onclick="switchFamily(\''+f.id+'\')">'+esc(f.name)+' <span class="fam-chip-n">'+f.person_count+'</span></button>').join('')+'</div>';
   }
   document.getElementById('famTitle').innerHTML = esc(fam.name);
-  let persons=[], members=[];
+  let persons=[], members=[], invites=[];
   try{ persons = (await j('/api/families/'+fam.id+'/persons')).persons; }catch(e){}
   try{ members = (await j('/api/families/'+fam.id+'/members')).members; }catch(e){}
+  try{ invites = (await j('/api/families/'+fam.id+'/invitations')).invitations; }catch(e){}
+  const inviteForPerson = pid => invites.find(i=>i.invited_person_id===pid);
+  const memberInvites = invites.filter(i=>!i.invited_person_id);
   const isOwner = fam.role==='OWNER' || fam.role==='CAREGIVER';
   const pCard=(p)=>'<div class="fam-card"><div class="fam-av">'+esc((p.name||'?')[0])+'</div>'
     + '<div style="flex:1;"><div class="fam-name">'+esc(p.name)+(p.user_id?' <span class="fam-you">has login</span>':' <span class="fam-managed">managed</span>')+'</div>'
     + '<div class="fam-meta">'+(p.age?p.age+' · ':'')+(p.relation?esc(p.relation):'')+'</div></div>'
-    + (isOwner && !p.user_id ? '<button class="fam-swap" onclick="invitePerson(\''+fam.id+'\',\''+p.id+'\',\''+esc(p.name)+'\')">Invite them</button>':'')
+    + (function(){
+        if(p.user_id) return '';
+        const inv = inviteForPerson(p.id);
+        if(inv) return '<div style="text-align:right;"><span class="fam-invited">Invite sent · waiting</span><br>'
+          + '<button class="fam-swap" style="margin-top:4px;" onclick="copyInviteLink(\''+inv.token+'\')">Copy link</button></div>';
+        return isOwner ? '<button class="fam-swap" onclick="invitePerson(\''+fam.id+'\',\''+p.id+'\',\''+esc(p.name)+'\')">Invite them</button>' : '';
+      })()
     + '</div>';
   const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc((m.name||'?')[0])+'</div>'
     + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
@@ -3212,11 +3224,20 @@ async function loadFamily(){
     + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="addPersonFlow(\''+fam.id+'\')">+ Add a person</button>':'')
     + '</div>'
     + '<div class="fam-sec"><h4>Family &amp; caregivers <span class="fam-n">'+members.length+'</span></h4>'+members.map(mCard).join('')
+    + memberInvites.map(i=>'<div class="fam-card" style="opacity:0.75;"><div class="fam-av">?</div>'
+        + '<div style="flex:1;"><div class="fam-name">'+esc(i.invited_email||'Invited')+' <span class="fam-invited">Invite sent · waiting</span></div>'
+        + '<div class="fam-meta">invited by '+esc(i.invited_by||'')+'</div></div>'
+        + '<button class="fam-swap" onclick="copyInviteLink(\''+i.token+'\')">Copy link</button></div>').join('')
     + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="inviteMember(\''+fam.id+'\')">+ Invite a family member</button>':'')
     + '</div>'
     + '<div class="disclaimer">Everyone in a family can see the vaults of those being cared for. A caregiver\'s own vault stays private to them.</div>';
 }
 async function switchFamily(id){ ACTIVE_FAMILY=id; loadFamily(); }
+function copyInviteLink(token){
+  const link=inviteLink(token);
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(link).then(()=>toast('Invite link copied.','success')).catch(()=>prompt('Copy this link:',link)); }
+  else prompt('Copy this link:',link);
+}
 async function acceptInviteToken(token){
   try{
     const r = await j('/api/invitations/'+encodeURIComponent(token)+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
@@ -3259,7 +3280,8 @@ async function invitePerson(familyId, personId, name){
   try{
     const r = await j('/api/families/'+familyId+'/invitations',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:res.email.trim(), person_id:personId, role:'CARE_RECIPIENT'})});
-    await showInvite(name, r.invitation.token);
+    await showInvite(name, r.invitation.token, r.invitation.emailed);
+    loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
 async function inviteMember(familyId){
@@ -3269,19 +3291,20 @@ async function inviteMember(familyId){
   try{
     const r = await j('/api/families/'+familyId+'/invitations',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:res.email.trim(), role:'CAREGIVER'})});
-    await showInvite('your family', r.invitation.token);
+    await showInvite('your family', r.invitation.token, r.invitation.emailed);
+    loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
 function inviteLink(token){ return location.origin+'/?invite='+encodeURIComponent(token); }
 function inviteText(famName, token){
   return 'Join our family on ParentFirst\n\n'+famName+'\n'+inviteLink(token)+'\n\nOpen the link, sign up, and you\'re in.';
 }
-async function showInvite(famName, token){
+async function showInvite(famName, token, emailed){
   const link = inviteLink(token);
   return new Promise(res=>{
     const bg=document.createElement('div'); bg.className='modal-bg open';
     bg.innerHTML='<div class="modal" style="max-width:460px;"><h2>Invite sent</h2>'
-      + '<p class="msub">Share this link — they tap it, sign up, and land straight in your family.</p>'
+      + '<p class="msub">'+(emailed?'We\'ve emailed them the invite. You can also share the link directly:':'Share this link — they tap it, sign up, and land straight in your family.')+'</p>'
       + '<div class="inv-link" id="invLinkBox">'+esc(link)+'</div>'
       + '<div class="inv-row">'
       + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(famName, token))+'">Share on WhatsApp</a>'
