@@ -115,8 +115,19 @@ async function authPluginImpl(app, { pool }) {
     const { email, name, password, account_type } = req.body || {};
     if (!email || !name || !password) return reply.code(400).send({ error: 'email, name, password required' });
     if (password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' });
-    const exists = await pool.query('SELECT 1 FROM users WHERE email=$1', [email.toLowerCase()]);
-    if (exists.rows[0]) return reply.code(409).send({ error: 'an account with this email already exists' });
+    const exists = await pool.query('SELECT id, verified FROM users WHERE email=$1', [email.toLowerCase()]);
+    if (exists.rows[0]) {
+      // A VERIFIED account is taken — sign in instead. But an UNVERIFIED one
+      // belongs to nobody yet (the email was never proven): treat a repeat
+      // signup as "try again" — refresh the details, send a fresh code.
+      if (exists.rows[0].verified) {
+        return reply.code(409).send({ error: 'an account with this email already exists — sign in instead' });
+      }
+      await pool.query('UPDATE users SET name=$2, password_hash=$3 WHERE id=$1',
+        [exists.rows[0].id, name, hashPassword(password)]);
+      try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
+      return { needs_verify: true, email: email.toLowerCase() };
+    }
     const { rows } = await pool.query(
       'INSERT INTO users (email, name, password_hash, verified) VALUES ($1,$2,$3,false) RETURNING id, email, name',
       [email.toLowerCase(), name, hashPassword(password)]);
