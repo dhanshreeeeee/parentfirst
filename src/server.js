@@ -14,7 +14,8 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { extractLocal } from './extract-local.js';
 import careRoutes from './routes-care.js';
-import householdRoutes from './routes-household.js';
+import familyRoutes from './routes-family.js';
+import { createFamily, addPersonToFamily, addUserToFamily, addCareRelationship } from './family.js';
 import { startDigest } from './digest.js';
 import { startCareLoop } from './care_loop.js';
 import webpush from 'web-push';
@@ -192,35 +193,38 @@ app.get('/api/health', async () => {
 
 // ── parents (scoped to the logged-in user's family) ─────────────
 app.get('/api/parents', async (req) => {
+  // every person the user can see, across all their families, with their role for each
   const { rows } = await pool.query(
-    `SELECT p.*, fm.role FROM family_members fm
-     JOIN parents p ON p.id = fm.parent_id
-     WHERE fm.user_id=$1 ORDER BY p.created_at`, [req.user.id]);
+    `SELECT DISTINCT p.*, f.id AS family_id, f.name AS family_name,
+            CASE WHEN p.user_id=$1 THEN 'dependent'
+                 WHEN cr.caregiver_user_id IS NOT NULL AND (cr.permissions->>'MANAGE_MEDICINES')::boolean THEN 'admin'
+                 WHEN cr.caregiver_user_id IS NOT NULL THEN 'member'
+                 ELSE 'member' END AS role
+     FROM persons p
+     JOIN persons_in_family pif ON pif.person_id=p.id
+     JOIN families f ON f.id=pif.family_id
+     JOIN family_memberships fm ON fm.family_id=f.id AND fm.user_id=$1 AND fm.status='ACTIVE'
+     LEFT JOIN care_relationships cr ON cr.person_id=p.id AND cr.caregiver_user_id=$1
+     ORDER BY p.created_at`, [req.user.id]);
   return rows;
 });
 
 app.post('/api/parents', async (req, reply) => {
   const { name, age, relation, city } = req.body || {};
   if (!name) return reply.code(400).send({ error: 'name required' });
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    const { rows } = await client.query(
-      'INSERT INTO parents (name, age, relation, city, created_by) VALUES ($1,$2,$3,$4,$5) RETURNING *',
-      [name, age || null, relation || null, city || null, req.user.id],
-    );
-    // creator becomes admin of this parent
-    await client.query(
-      `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'admin')`,
-      [req.user.id, rows[0].id]);
-    await client.query('COMMIT');
-    return { ...rows[0], role: 'admin' };
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
+  // ensure the user has a family (create a default one on first person)
+  let { rows: fams } = await pool.query(
+    `SELECT f.id FROM families f JOIN family_memberships fm ON fm.family_id=f.id
+     WHERE fm.user_id=$1 AND fm.role='OWNER' ORDER BY f.created_at LIMIT 1`, [req.user.id]);
+  let familyId = fams[0]?.id;
+  if (!familyId) {
+    const fam = await createFamily(pool, req.user.id, (req.user.name || 'My') + "'s family");
+    familyId = fam.id;
   }
+  const person = await addPersonToFamily(pool, {
+    familyId, name, age, relation, city, createdBy: req.user.id, caregiverUserId: req.user.id,
+  });
+  return { ...person, role: 'admin' };
 });
 
 // invite/add a family member to a parent (admin only) — by email
@@ -231,10 +235,18 @@ app.post('/api/parents/:parentId/members', async (req, reply) => {
   if (!['admin', 'member', 'caregiver'].includes(role)) return reply.code(400).send({ error: 'bad role' });
   const { rows: u } = await pool.query('SELECT id, name, email FROM users WHERE email=$1', [email.toLowerCase()]);
   if (!u[0]) return reply.code(404).send({ error: 'no user with that email — ask them to sign up first' });
-  await pool.query(
-    `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,$3)
-     ON CONFLICT (user_id, parent_id) DO UPDATE SET role=$3`,
-    [u[0].id, req.params.parentId, role]);
+  // find the family this person belongs to (via the requester's membership)
+  const { rows: fam } = await pool.query(
+    `SELECT pif.family_id FROM persons_in_family pif
+     JOIN family_memberships fm ON fm.family_id=pif.family_id AND fm.user_id=$1
+     WHERE pif.person_id=$2 LIMIT 1`, [req.user.id, req.params.parentId]);
+  if (!fam[0]) return reply.code(403).send({ error: 'no access to this person' });
+  const fid = fam[0].family_id;
+  const mapRole = role === 'admin' ? 'CAREGIVER' : role === 'caregiver' ? 'LOCAL_CAREGIVER' : 'FAMILY_MEMBER';
+  await addUserToFamily(pool, fid, u[0].id, mapRole);
+  if (role !== 'member') {
+    await addCareRelationship(pool, { familyId: fid, caregiverUserId: u[0].id, personId: req.params.parentId });
+  }
   return { added: { name: u[0].name, email: u[0].email, role } };
 });
 
@@ -597,7 +609,7 @@ app.get('/api/parents/:parentId/trends', async (req) => {
 });
 
 // ── care modules (medications, daily logs, emergency card) ──────
-await app.register(householdRoutes, { pool });
+await app.register(familyRoutes, { pool });
 
 await app.register(careRoutes, {
   pool,

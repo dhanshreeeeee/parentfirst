@@ -765,21 +765,23 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       let parent;
       if (existing[0]) {
         const { rows } = await client.query(
-          `UPDATE parents SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city)
+          `UPDATE persons SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city)
            WHERE id=$1 RETURNING *`,
           [existing[0].id, personName, age || null, city || null]);
         parent = rows[0];
       } else {
         const { rows } = await client.query(
-          `INSERT INTO parents (name, age, relation, city, created_by, user_id)
+          `INSERT INTO persons (name, age, relation, city, created_by, user_id)
            VALUES ($1,$2,'self',$3,$4,$4) RETURNING *`,
           [personName, age || null, city || null, req.user.id]);
         parent = rows[0];
+        // a person who signs up as themselves needs a family + self-membership
+        const { rows: f } = await client.query(
+          `INSERT INTO families (name, created_by) VALUES ($1,$2) RETURNING id`,
+          [(personName || 'My') + "'s family", req.user.id]);
+        await client.query(`INSERT INTO family_memberships (family_id, user_id, role) VALUES ($1,$2,'CARE_RECIPIENT') ON CONFLICT DO NOTHING`, [f[0].id, req.user.id]);
+        await client.query(`INSERT INTO persons_in_family (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [f[0].id, parent.id]);
       }
-      await client.query(
-        `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'dependent')
-         ON CONFLICT (user_id, parent_id) DO UPDATE SET role='dependent'`,
-        [req.user.id, parent.id]);
       const prof = { ...(profile || {}) };
       if (gender) prof.gender = gender;
       if (phone) prof.phone = phone;

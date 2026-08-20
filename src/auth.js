@@ -4,6 +4,7 @@
 // - family_members maps a user to a parent with a role
 import crypto from 'node:crypto';
 import fp from 'fastify-plugin';
+import { accessToPerson } from './family.js';
 
 const COOKIE = 'pf_session';
 const SESSION_DAYS = 30;
@@ -55,14 +56,9 @@ export async function ensureSeed(pool) {
     'INSERT INTO users (email, name, password_hash) VALUES ($1,$2,$3) RETURNING id',
     [email, name, ph]);
   const userId = u[0].id;
-  // link every existing parent to this user as admin
-  const { rows: parents } = await pool.query('SELECT id FROM parents');
-  for (const p of parents) {
-    await pool.query(
-      `INSERT INTO family_members (user_id, parent_id, role) VALUES ($1,$2,'admin')
-       ON CONFLICT (user_id, parent_id) DO NOTHING`, [userId, p.id]);
-  }
-  return { email, password };
+  // (Legacy seed helper. The new model links people through families/care
+  //  relationships at onboarding, so nothing to backfill here.)
+  return { email, password, userId };
 }
 
 async function authPluginImpl(app, { pool }) {
@@ -79,7 +75,7 @@ async function authPluginImpl(app, { pool }) {
       !isApi ||
       url === '/api/health' ||
       url.startsWith('/api/auth/') ||
-      url.startsWith('/api/households/peek/') ||
+      url.match(/^\/api\/invitations\/[^/]+\/peek$/) ||
       url === '/api/push/vapid-key' ||
       url === '/api/activities';
 
@@ -97,14 +93,17 @@ async function authPluginImpl(app, { pool }) {
 
     if (!req.user) return reply.code(401).send({ error: 'not authenticated' });
 
-    // if the route targets a specific parent, enforce membership + capture role
-    const parentId = req.params?.parentId;
+    // if the route targets a specific person, enforce access via the family graph
+    // (self → care relationship → family co-membership) and capture permissions.
+    const parentId = req.params?.parentId || req.params?.personId;
     if (parentId) {
-      const { rows } = await pool.query(
-        'SELECT role FROM family_members WHERE user_id=$1 AND parent_id=$2',
-        [req.user.id, parentId]);
-      if (!rows[0]) return reply.code(403).send({ error: 'no access to this parent' });
-      req.parentRole = rows[0].role;
+      const access = await accessToPerson(pool, req.user.id, parentId);
+      if (!access) return reply.code(403).send({ error: 'no access to this person' });
+      req.access = access;
+      // back-compat: old routes read req.parentRole ('admin'|'member'|'dependent').
+      // Map from the new model so existing handlers keep working unchanged.
+      req.parentRole = access.self ? 'dependent'
+        : (access.permissions && access.permissions.MANAGE_MEDICINES) ? 'admin' : 'member';
     }
   });
 
@@ -112,9 +111,10 @@ async function authPluginImpl(app, { pool }) {
   app.post('/api/auth/signup', {
     config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
-    const { email, name, password, account_type } = req.body || {};
+    const { email, name, password, account_type, signup_role } = req.body || {};
     if (!email || !name || !password) return reply.code(400).send({ error: 'email, name, password required' });
     if (password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' });
+    const role = signup_role || account_type || 'carer';   // the human's self-description; onboarding uses it
     const exists = await pool.query('SELECT id, verified FROM users WHERE email=$1', [email.toLowerCase()]);
     if (exists.rows[0]) {
       // A VERIFIED account is taken — sign in instead. But an UNVERIFIED one
@@ -123,14 +123,14 @@ async function authPluginImpl(app, { pool }) {
       if (exists.rows[0].verified) {
         return reply.code(409).send({ error: 'an account with this email already exists — sign in instead' });
       }
-      await pool.query('UPDATE users SET name=$2, password_hash=$3 WHERE id=$1',
-        [exists.rows[0].id, name, hashPassword(password)]);
+      await pool.query('UPDATE users SET name=$2, password_hash=$3, signup_role=$4 WHERE id=$1',
+        [exists.rows[0].id, name, hashPassword(password), role]);
       try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
       return { needs_verify: true, email: email.toLowerCase() };
     }
     const { rows } = await pool.query(
-      'INSERT INTO users (email, name, password_hash, verified) VALUES ($1,$2,$3,false) RETURNING id, email, name',
-      [email.toLowerCase(), name, hashPassword(password)]);
+      'INSERT INTO users (email, name, password_hash, verified, signup_role) VALUES ($1,$2,$3,false,$4) RETURNING id, email, name',
+      [email.toLowerCase(), name, hashPassword(password), role]);
     try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
     return { needs_verify: true, email: rows[0].email };
   });
@@ -259,11 +259,19 @@ async function authPluginImpl(app, { pool }) {
       `SELECT p.*, fm.role FROM family_members fm
        JOIN parents p ON p.id = fm.parent_id
        WHERE fm.user_id=$1 ORDER BY p.created_at`, [req.user.id]);
-    // is this user themselves a dependent? (their own parent record)
+    // families the user belongs to (for the switcher)
+    const { rows: families } = await pool.query(
+      `SELECT f.id, f.name, m.role,
+              (SELECT count(*) FROM persons_in_family WHERE family_id=f.id) AS person_count,
+              (SELECT count(*) FROM family_memberships WHERE family_id=f.id AND status='ACTIVE') AS member_count
+       FROM families f JOIN family_memberships m ON m.family_id=f.id
+       WHERE m.user_id=$1 AND m.status='ACTIVE' ORDER BY f.created_at`, [req.user.id]);
+    // is this user themselves a dependent? (their own person record)
     const selfRow = parents.find((p) => p.user_id === req.user.id);
     return {
       user: { ...req.user, onboarded: !!u[0]?.onboarded },
       parents,
+      families,
       is_dependent: !!selfRow,
       self_parent_id: selfRow ? selfRow.id : null,
     };

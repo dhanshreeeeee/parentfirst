@@ -654,6 +654,27 @@
   .det-cell{ background:var(--white); border:1px solid var(--border); border-radius:12px; padding:0.8rem 1rem; }
   .attn-act{ flex-shrink:0; }
   .btn-sm{ background:var(--ink); color:#fff; border:none; padding:8px 16px; border-radius:10px; font-size:13px; cursor:pointer; }
+
+  .fam-switch{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:1.1rem; }
+  .fam-chip{ background:var(--white); border:1.5px solid var(--border); border-radius:20px; padding:7px 15px; font-size:13.5px; cursor:pointer; }
+  .fam-chip.on{ border-color:var(--rust); background:var(--rust-light); font-weight:700; }
+  .fam-chip-n{ opacity:0.6; font-size:12px; }
+  .pboard{ display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1rem; margin-bottom:1.6rem; }
+  .pcard{ text-align:left; background:var(--white); border:1.5px solid var(--border); border-left-width:5px; border-radius:var(--r-lg); padding:1.1rem 1.2rem; cursor:pointer; transition:transform .12s; display:block; width:100%; }
+  .pcard:hover{ transform:translateY(-2px); }
+  .pcard-green{ border-left-color:var(--sage); }
+  .pcard-amber{ border-left-color:var(--gold); }
+  .pcard-red{ border-left-color:var(--red); }
+  .pcard-top{ display:flex; align-items:center; justify-content:space-between; margin-bottom:0.7rem; }
+  .pcard-name{ font-family:var(--font-display); font-size:19px; }
+  .pcard-dot{ width:11px; height:11px; border-radius:50%; }
+  .pcard-green .pcard-dot{ background:var(--sage); }
+  .pcard-amber .pcard-dot{ background:var(--gold); }
+  .pcard-red .pcard-dot{ background:var(--red); }
+  .pcard-row{ font-size:13px; color:var(--ink-muted); padding:3px 0; }
+  .pcard-row.good{ color:var(--sage); }
+  .pcard-row.warn{ color:#9a7508; }
+  .pcard-alert{ margin-top:0.6rem; font-size:12.5px; font-weight:600; color:var(--red); background:var(--red-light); border-radius:8px; padding:5px 9px; }
 </style>
 </head>
 <body>
@@ -1501,65 +1522,16 @@ function applyRoleUI(){
 // add parent (admin action) — styled modal
 function goFamily(){ nav_('family'); closeMenus(''); }
 async function addByEmail(){
-  if(!HOUSE){ toast('Create your family group first.','error'); return; }
-  // Step 1: just the email. We look them up so their own signup answer decides
-  // the role — no need for the admin to declare it again.
-  const who = await formModal({
-    title:'Add someone to the group',
-    subtitle:'Ask them to sign up first, then enter the email address they used.',
-    submitLabel:'Look them up',
-    fields:[{id:'email', label:'Their email', placeholder:'e.g. papa@gmail.com'}],
-  });
-  if(!who || !who.email) return;
-  let found;
-  try{ found = await j('/api/households/'+HOUSE.id+'/lookup?email='+encodeURIComponent(who.email.trim())); }
-  catch(e){ toast(e.message,'error'); return; }
-
-  const isParent = found.signup_role === 'parent';
-  // Step 2: confirm, pre-set to what they signed up as
-  const confirm = await formModal({
-    title:'Add '+found.name+'?',
-    subtitle: found.name+' signed up as '+(isParent?'a parent being cared for':'someone helping with care')+'. You can change this if it\'s wrong.',
-    submitLabel:'Add to group',
-    fields:[{id:'care_role', label:'In this family they are…', options: isParent
-      ? [{label:'Being cared for', value:'elder'},{label:'Helping look after them', value:'carer'}]
-      : [{label:'Helping look after them', value:'carer'},{label:'Being cared for', value:'elder'}]}],
-  });
-  if(!confirm) return;
-  try{
-    const r = await j('/api/households/'+HOUSE.id+'/add-member',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({email:who.email.trim(), care_role:confirm.care_role})});
-    toast(r.name+' added — '+(r.care_role==='elder'?'being cared for':'helping look after them')+'.','success');
-    ME = await j('/api/me'); loadFamily();
-  }catch(e){ toast(e.message,'error'); }
+  const fams=(await j('/api/families').catch(()=>({families:[]}))).families;
+  const fid=ACTIVE_FAMILY||(fams[0]&&fams[0].id);
+  if(!fid){ toast('Create your family first.','error'); return; }
+  await inviteMember(fid);
 }
 async function addManagedMember(){
-  if(!HOUSE){ toast('Create or join a family group first.','error'); return; }
-  const res = await formModal({
-    title:'Add someone who doesn\'t use apps',
-    subtitle:'For a parent or grandparent who won\'t sign in themselves. The family manages their record — and if they ever do sign up, they can claim it with all its history.',
-    submitLabel:'Add',
-    fields:[
-      {id:'name', label:'Their name', placeholder:'e.g. Harish Khandelwal'},
-      {id:'age', label:'Age', type:'number', placeholder:'e.g. 85'},
-      {id:'relation', label:'Relation to you', placeholder:'e.g. Father'},
-      {id:'city', label:'City', placeholder:'e.g. Bengaluru'},
-    ],
-  });
-  if(!res || !res.name) return;
-  try{
-    await j('/api/households/'+HOUSE.id+'/managed',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:res.name, age:res.age?+res.age:null, relation:res.relation, city:res.city})});
-    toast(res.name+' added — the family can now manage their record.','success');
-    ME = await j('/api/me');
-  // invite link tapped by someone who already has an account
-  const pendingJoin = sessionStorage.getItem('pf_join_code');
-  if (pendingJoin && ME && ME.user) {
-    sessionStorage.removeItem('pf_join_code');
-    await joinWithCode(pendingJoin);
-    ME = await j('/api/me');
-  } loadFamily();
-  }catch(e){ toast(e.message,'error'); }
+  const fams=(await j('/api/families').catch(()=>({families:[]}))).families;
+  const fid=ACTIVE_FAMILY||(fams[0]&&fams[0].id);
+  if(!fid){ toast('Create your family first.','error'); return; }
+  await addPersonFlow(fid);
 }
 // family & roles — styled modal
 async function openMembers(){
@@ -1641,12 +1613,13 @@ async function init(){
 
 // invite deep link — runs before anything else
 (function(){
-  const code = new URLSearchParams(location.search).get('join');
+  const params = new URLSearchParams(location.search);
+  const code = params.get('invite') || params.get('join');
   if(!code) return;
-  sessionStorage.setItem('pf_join_code', code.toUpperCase());
+  sessionStorage.setItem('pf_join_code', code);   // token is case-sensitive — do not alter
   history.replaceState({}, '', location.pathname);   // keep the code out of the URL bar
   try{
-  fetch('/api/households/peek/'+encodeURIComponent(code.toUpperCase()))
+  fetch('/api/invitations/'+encodeURIComponent(code)+'/peek')
     .then(r=>r.ok?r.json():null)
     .then(h=>{ if(h){ window._pfInviteFrom = h; if(typeof renderInviteBanner==='function') renderInviteBanner(); } })
     .catch(()=>{});
@@ -1778,7 +1751,7 @@ async function onbNextStep(){
     // everyone else gets added by the admin
     try{
       const pending = sessionStorage.getItem('pf_join_code');
-      if(pending){ await joinWithCode(pending); sessionStorage.removeItem('pf_join_code'); }
+      if(pending){ await acceptInviteToken(pending); sessionStorage.removeItem('pf_join_code'); }
     }catch(e){ toast(e.message,'error'); }
 
     closeOnb();
@@ -3123,153 +3096,127 @@ if('serviceWorker' in navigator && (location.protocol==='https:' || location.hos
 
 // ═══════════ FAMILY GROUP ═══════════
 let HOUSE=null;
+let ACTIVE_FAMILY=null;
 async function loadFamily(){
   const body=document.getElementById('famBody');
-  let list;
-  try{ list = await j('/api/households'); }
+  let data;
+  try{ data = await j('/api/families'); }
   catch(e){ body.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
-  if(!list.length){
+  const families = data.families||[];
+  if(!families.length){
     body.innerHTML =
-      '<div class="fam-empty"><h3>You\'re not in a family group yet</h3>'
-      + '<p>A group holds everyone together — the people being cared for and the people looking after them.</p>'
-      + '<div class="fam-actions"><button class="btn-primary" onclick="createHousehold()">Create a family group</button>'
-      + '<button class="btn-out" onclick="joinHousehold()">Join with a code</button></div></div>';
+      '<div class="fam-empty"><h3>No family care space yet</h3>'
+      + '<p>A family is the shared space that holds everyone — the people being cared for and the people looking after them.</p>'
+      + '<div class="fam-actions"><button class="btn-primary" onclick="createFamilyFlow()">Create a family</button></div></div>';
     return;
   }
-  HOUSE = list[0];
-  let d;
-  try{ d = await j('/api/households/'+HOUSE.id); }catch(e){ body.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
-  document.getElementById('famTitle').innerHTML = esc(d.household.name);
-  const elders=d.members.filter(m=>m.care_role==='elder');
-  const carers=d.members.filter(m=>m.care_role!=='elder');
-  const card=(m)=>'<div class="fam-card"><div class="fam-av">'+esc(m.name[0])+'</div>'
-    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
-    + '<div class="fam-meta">'+esc(m.email)+(m.age?' · '+m.age:'')+(m.is_owner?' · group owner':'')+'</div></div>'
-    + (d.me.is_owner && m.user_id!==ME.user.id
-        ? '<button class="fam-swap" onclick="setCareRole(\''+m.user_id+'\',\''+(m.care_role==='elder'?'carer':'elder')+'\')">Make '+(m.care_role==='elder'?'carer':'cared for')+'</button>' : '')
+  // active family (first, or remembered)
+  const fam = families.find(f=>f.id===ACTIVE_FAMILY) || families[0];
+  ACTIVE_FAMILY = fam.id;
+  // switcher (only if more than one)
+  let head='';
+  if(families.length>1){
+    head = '<div class="fam-switch">'+families.map(f=>
+      '<button class="fam-chip'+(f.id===fam.id?' on':'')+'" onclick="switchFamily(\''+f.id+'\')">'+esc(f.name)+' <span class="fam-chip-n">'+f.person_count+'</span></button>').join('')+'</div>';
+  }
+  document.getElementById('famTitle').innerHTML = esc(fam.name);
+  let persons=[], members=[];
+  try{ persons = (await j('/api/families/'+fam.id+'/persons')).persons; }catch(e){}
+  try{ members = (await j('/api/families/'+fam.id+'/members')).members; }catch(e){}
+  const isOwner = fam.role==='OWNER' || fam.role==='CAREGIVER';
+  const pCard=(p)=>'<div class="fam-card"><div class="fam-av">'+esc((p.name||'?')[0])+'</div>'
+    + '<div style="flex:1;"><div class="fam-name">'+esc(p.name)+(p.user_id?' <span class="fam-you">has login</span>':' <span class="fam-managed">managed</span>')+'</div>'
+    + '<div class="fam-meta">'+(p.age?p.age+' · ':'')+(p.relation?esc(p.relation):'')+'</div></div>'
+    + (isOwner && !p.user_id ? '<button class="fam-swap" onclick="invitePerson(\''+fam.id+'\',\''+p.id+'\',\''+esc(p.name)+'\')">Invite them</button>':'')
     + '</div>';
-  let managed=[];
-  try{ managed = await j('/api/households/'+HOUSE.id+'/claimable'); }catch(e){}
-  const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc(m.name[0])+'</div>'
-    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+' <span class="fam-managed">managed by family</span></div>'
-    + '<div class="fam-meta">'+(m.age?m.age+' · ':'')+(m.relation?esc(m.relation)+' · ':'')+m.report_count+' reports · '+m.med_count+' medicines</div></div></div>';
-  body.innerHTML =
-    '<div class="fam-sec"><h4>Being cared for <span class="fam-n">'+(elders.length+managed.length)+'</span></h4>'
-    + managed.map(mCard).join('')
-    + (elders.length? elders.map(card).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — mark a member as cared for.</div>')
+  const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc((m.name||'?')[0])+'</div>'
+    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
+    + '<div class="fam-meta">'+esc(m.email)+' · '+esc((m.role||'').toLowerCase())+'</div></div></div>';
+  body.innerHTML = head
+    + '<div class="fam-sec"><h4>People we care for <span class="fam-n">'+persons.length+'</span></h4>'
+    + (persons.length? persons.map(pCard).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — add the first person.</div>')
+    + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="addPersonFlow(\''+fam.id+'\')">+ Add a person</button>':'')
     + '</div>'
-    + '<div class="fam-sec"><h4>Looking after them <span class="fam-n">'+carers.length+'</span></h4>'+carers.map(card).join('')+'</div>'
-    + (d.me.is_owner
-        ? '<div class="fam-add"><h4>Add someone to this group</h4>'
-          + '<p class="fam-add-p">They sign up first, then you add them here with the email they used.</p>'
-          + '<div class="inv-row"><button class="btn-primary" onclick="addByEmail()">+ Add by email</button>'
-          + '<button class="btn-out" onclick="addManagedMember()">Add someone who doesn\'t use apps</button></div></div>'
-        : '')
-    + (d.invite_code && d.me.is_owner
-        ? '<details class="fam-link-alt"><summary>Or share an invite link instead</summary>'
-          + '<div class="inv-row" style="margin-top:0.8rem;">'
-          + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(d.household.name, d.invite_code))+'">Share on WhatsApp</a>'
-          + '<button class="btn-out" onclick="navigator.clipboard.writeText(inviteLink(\''+esc(d.invite_code)+'\')).then(()=>toast(\'Link copied.\',\'success\'))">Copy link</button>'
-          + '</div>'
-          + '<div class="fam-inv-hint" style="margin-top:0.7rem;">Anyone with the link joins as a helper when they sign up. Code: <b>'+esc(d.invite_code)+'</b></div></details>'
-        : '')
-    + '<div class="disclaimer">Everyone in a group can see the vaults of those being cared for. A carer\'s own vault stays private to them.</div>';
+    + '<div class="fam-sec"><h4>Family &amp; caregivers <span class="fam-n">'+members.length+'</span></h4>'+members.map(mCard).join('')
+    + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="inviteMember(\''+fam.id+'\')">+ Invite a family member</button>':'')
+    + '</div>'
+    + '<div class="disclaimer">Everyone in a family can see the vaults of those being cared for. A caregiver\'s own vault stays private to them.</div>';
 }
-async function createHousehold(){
-  const res = await formModal({ title:'Name your family group', subtitle:'Something everyone will recognise.', submitLabel:'Create group',
-    fields:[{id:'name', label:'Group name', placeholder:'e.g. Khandelwal Family'}] });
+async function switchFamily(id){ ACTIVE_FAMILY=id; loadFamily(); }
+async function acceptInviteToken(token){
+  try{
+    const r = await j('/api/invitations/'+encodeURIComponent(token)+'/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    ACTIVE_FAMILY = r.family_id;
+    toast('You\'ve joined the family.','success');
+    ME = await j('/api/me');
+  }catch(e){ toast(e.message||'Could not join','error'); }
+}
+
+async function createFamilyFlow(){
+  const res = await formModal({ title:'Name your family', subtitle:'Something everyone will recognise.', submitLabel:'Create',
+    fields:[{id:'name', label:'Family name', placeholder:'e.g. Khandelwal Family'}] });
   if(!res || !res.name) return;
   try{
-    const h = await j('/api/households',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:res.name, care_role:'carer'})});
-    await showInvite(h.name, h.invite_code);
+    const fam = await j('/api/families',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:res.name.trim()})});
+    ACTIVE_FAMILY = fam.id;
+    toast('Family created.','success');
     ME = await j('/api/me'); loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
-async function joinHousehold(){
-  const res = await formModal({ title:'Join your family', subtitle:'Paste the code from the invite message.', submitLabel:'Join',
-    fields:[{id:'invite_code', label:'Invite code', placeholder:'e.g. C25CF09D'}] });
-  if(!res || !res.invite_code) return;
-  await joinWithCode(res.invite_code);
-  ME = await j('/api/me'); loadFamily();
+async function addPersonFlow(familyId){
+  const res = await formModal({ title:'Add a person', subtitle:'Someone you care for. They don\'t need an account.', submitLabel:'Add',
+    fields:[
+      {id:'name', label:'Their name', placeholder:'e.g. Papa'},
+      {id:'age', label:'Age', type:'number'},
+      {id:'relation', label:'Relation to you', placeholder:'e.g. father'},
+    ]});
+  if(!res || !res.name) return;
+  try{
+    await j('/api/families/'+familyId+'/persons',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:res.name.trim(), age:res.age?+res.age:null, relation:res.relation||null})});
+    toast('Added.','success');
+    ME = await j('/api/me'); loadFamily(); paintParent();
+  }catch(e){ toast(e.message,'error'); }
 }
-async function setCareRole(userId, role){
-  try{ await j('/api/households/'+HOUSE.id+'/members/'+userId+'/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({care_role:role})});
-    toast('Updated.','success'); ME=await j('/api/me'); loadFamily(); }
-  catch(e){ toast(e.message,'error'); }
+async function invitePerson(familyId, personId, name){
+  const res = await formModal({ title:'Invite '+name, subtitle:'They\'ll get a link to join and claim their own record — no duplicate is created.', submitLabel:'Create invite',
+    fields:[{id:'email', label:'Their email', placeholder:'name@example.com'}] });
+  if(!res || !res.email) return;
+  try{
+    const r = await j('/api/families/'+familyId+'/invitations',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:res.email.trim(), person_id:personId, role:'CARE_RECIPIENT'})});
+    await showInvite(name, r.invitation.token);
+  }catch(e){ toast(e.message,'error'); }
 }
-
-
-// ═══════════ FAMILY STEP (runs once after intake) ═══════════
-// The rule that keeps identity clean: one human = one record. You either
-// create the group, join one with a code, or continue alone. Joining as an
-// elder offers existing manage-for-them records to CLAIM instead of duplicating.
-async function joinWithCode(code){
-  let joined;
-  try{ joined = await j('/api/households/join',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({invite_code:code})}); }
-  catch(e){ toast(e.message,'error'); return; }
-  toast('Welcome to '+joined.household.name+'.','success');
-  // "is one of these you?" — links their signup to the record the family
-  // already keeps, so history is never split across two people
-  const claimable = joined.claimable||[];
-  if(claimable.length){
-    const opts = claimable.map(c=>({label:c.name+(c.age?', '+c.age:'')+' — '+c.report_count+' reports, '+c.med_count+' medicines', value:c.id}));
-    opts.push({label:'None of these — I\'m joining to help care for them', value:''});
-    const pick = await formModal({ title:'Is one of these you?',
-      subtitle:'Your family already keeps records for these people. If one is you, claim it — all its history becomes yours.',
-      submitLabel:'Continue', fields:[{id:'parent_id', label:'', options:opts}] });
-    if(pick && pick.parent_id){
-      try{
-        await j('/api/households/'+joined.household.id+'/claim',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({parent_id:pick.parent_id})});
-        toast('That record is now yours — history included.','success');
-      }catch(e){ toast(e.message,'error'); }
-    }
-  }
+async function inviteMember(familyId){
+  const res = await formModal({ title:'Invite a family member', subtitle:'A sibling or relative who\'ll help look after everyone.', submitLabel:'Create invite',
+    fields:[{id:'email', label:'Their email', placeholder:'name@example.com'}] });
+  if(!res || !res.email) return;
+  try{
+    const r = await j('/api/families/'+familyId+'/invitations',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:res.email.trim(), role:'CAREGIVER'})});
+    await showInvite('your family', r.invitation.token);
+  }catch(e){ toast(e.message,'error'); }
 }
-function inviteLink(code){ return location.origin+'/?join='+encodeURIComponent(code); }
-function inviteText(famName, code){
-  return 'Join our family on ParentFirst\n\n'+famName+'\n'+inviteLink(code)+'\n\nOpen the link, sign up, and you\'re in.';
+function inviteLink(token){ return location.origin+'/?invite='+encodeURIComponent(token); }
+function inviteText(famName, token){
+  return 'Join our family on ParentFirst\n\n'+famName+'\n'+inviteLink(token)+'\n\nOpen the link, sign up, and you\'re in.';
 }
-async function showInvite(famName, code){
-  const link = inviteLink(code);
+async function showInvite(famName, token){
+  const link = inviteLink(token);
   return new Promise(res=>{
     const bg=document.createElement('div'); bg.className='modal-bg open';
-    bg.innerHTML='<div class="modal" style="max-width:460px;"><h2>Invite your family</h2>'
-      + '<p class="msub">Send this link — they tap it, sign up, and land straight in your group.</p>'
+    bg.innerHTML='<div class="modal" style="max-width:460px;"><h2>Invite sent</h2>'
+      + '<p class="msub">Share this link — they tap it, sign up, and land straight in your family.</p>'
       + '<div class="inv-link" id="invLinkBox">'+esc(link)+'</div>'
       + '<div class="inv-row">'
-      + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(famName, code))+'">Share on WhatsApp</a>'
+      + '<a class="btn-primary inv-wa" target="_blank" href="https://wa.me/?text='+encodeURIComponent(inviteText(famName, token))+'">Share on WhatsApp</a>'
       + '<button class="btn-out" onclick="navigator.clipboard.writeText(document.getElementById(\'invLinkBox\').textContent).then(()=>toast(\'Link copied.\',\'success\'))">Copy link</button>'
       + '</div>'
-      + '<p class="inv-code-note">Or share the code: <b>'+esc(code)+'</b></p>'
       + '<div class="modal-actions"><button class="btn-primary" id="invDone">Done</button></div></div>';
     bg.querySelector('#invDone').onclick=()=>{ bg.remove(); res(); };
     document.body.appendChild(bg);
   });
-}
-async function modalInfo(title, html){
-  return new Promise(res=>{
-    const bg=document.createElement('div'); bg.className='modal-bg open';
-    bg.innerHTML='<div class="modal" style="max-width:430px;"><h2>'+esc(title)+'</h2><p class="msub" style="line-height:1.7;">'+html+'</p><div class="modal-actions"><button class="btn-primary">Done</button></div></div>';
-    bg.querySelector('button').onclick=()=>{ bg.remove(); res(); };
-    document.body.appendChild(bg);
-  });
-}
-
-// If they're not in a family group yet, say so once — and make clear that
-// joining is usually someone else's job, not a second group.
-async function checkFamilyPrompt(){
-  let list=[];
-  try{ list = await j('/api/households'); }catch(e){ return; }
-  const bar=document.getElementById('famPrompt'); if(!bar) return;
-  if(list.length){ bar.style.display='none'; return; }
-  bar.style.display='block';
-  bar.innerHTML =
-    '<div class="fp-in"><div><b>You\'re not in a family group yet.</b> '
-    + 'If someone in your family has already set one up, ask them to add you using '
-    + '<b>'+esc(ME.user.email)+'</b>. If nobody has, you can start it.</div>'
-    + '<button class="btn-primary fp-btn" onclick="createHousehold()">Create the group</button></div>';
 }
 
 
@@ -3388,11 +3335,11 @@ async function loadMedCal(){
 async function loadEvents(){
   const host=document.getElementById('evList');
   let hh=[];
-  try{ hh = await j('/api/households'); }catch(e){}
+  try{ hh = (await j('/api/families')).families; }catch(e){}
   if(!hh.length){ host.innerHTML='<div class="psub">Join or create your family group first — events are shared with the whole family.</div>'; return; }
   HOUSE = HOUSE || hh[0];
   let evs=[];
-  try{ evs = await j('/api/households/'+HOUSE.id+'/events'); }catch(e){ host.innerHTML=''; return; }
+  if(!famId){ host.innerHTML=''; return; } try{ evs = await j('/api/families/'+famId+'/events'); }catch(e){ host.innerHTML=''; return; }
   if(!evs.length){ host.innerHTML='<div class="psub">Nothing planned yet. Add the first outing.</div>'; return; }
   host.innerHTML = evs.map(e=>{
     const d=new Date(e.event_date+'T00:00');
@@ -3407,7 +3354,7 @@ async function loadEvents(){
 }
 async function addEvent(){
   let hh=[];
-  try{ hh = await j('/api/households'); }catch(e){}
+  try{ hh = (await j('/api/families')).families; }catch(e){}
   if(!hh.length){ toast('Create or join your family group first.','error'); return; }
   HOUSE = HOUSE || hh[0];
   const res = await formModal({ title:'Add an outing or event', submitLabel:'Add',
@@ -3420,12 +3367,12 @@ async function addEvent(){
     ]});
   if(!res || !res.title || !res.event_date) return;
   try{
-    await j('/api/households/'+HOUSE.id+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
+    if(!famId){ toast('Create a family first.','error'); return; } await j('/api/families/'+famId+'/events',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
     toast('Added to the family board.','success'); loadEvents();
   }catch(e){ toast(e.message,'error'); }
 }
 async function delEvent(id){
-  try{ await j('/api/households/'+HOUSE.id+'/events/'+id,{method:'DELETE'}); loadEvents(); }
+  try{ await j('/api/families/'+(ACTIVE_FAMILY||(hh[0]&&hh[0].id))+'/events/'+id,{method:'DELETE'}); loadEvents(); }
   catch(e){ toast(e.message,'error'); }
 }
 
@@ -3598,7 +3545,37 @@ async function editMedical(){
 // ═══════════ TODAY: status strip · attention · checklist ═══════════
 // The whole page exists to be boring on a good day.
 async function loadTodayExtras(){
-  loadStatusStrip(); loadAttention(); loadChecklist();
+  loadFamilyBoard(); loadAttention(); loadChecklist();
+}
+async function loadFamilyBoard(){
+  const host=document.getElementById('statusStrip'); if(!host) return;
+  let fams=[];
+  try{ fams=(await j('/api/families')).families; }catch(e){ host.innerHTML=''; return; }
+  if(!fams.length){ host.innerHTML=''; return; }
+  const fam = fams.find(f=>f.id===ACTIVE_FAMILY) || fams[0];
+  ACTIVE_FAMILY = fam.id;
+  let head='';
+  if(fams.length>1){
+    head = '<div class="fam-switch">'+fams.map(f=>
+      '<button class="fam-chip'+(f.id===fam.id?' on':'')+'" onclick="ACTIVE_FAMILY=\''+f.id+'\';loadTodayExtras();loadMonitor();">'+esc(f.name)+' <span class="fam-chip-n">'+f.person_count+'</span></button>').join('')+'</div>';
+  }
+  let board;
+  try{ board=await j('/api/families/'+fam.id+'/status'); }catch(e){ host.innerHTML=head; return; }
+  const cards=(board.persons||[]).map(pc=>{
+    const first=esc((pc.name||'').split(' ')[0]);
+    const medTxt = pc.meds.due ? pc.meds.done+'/'+pc.meds.due+' meds' : 'no meds set';
+    const medOk = pc.meds.due && pc.meds.done>=pc.meds.due;
+    const ci = pc.checkin ? ('checked in'+(pc.checkin.mood?' - '+pc.checkin.mood:'')) : 'no check-in';
+    const vit = pc.vital ? [pc.vital.bp&&('BP '+pc.vital.bp), pc.vital.sugar&&('Sugar '+pc.vital.sugar), pc.vital.pulse&&('Pulse '+pc.vital.pulse)].filter(Boolean).join(' - ') : 'no readings yet';
+    return '<button class="pcard pcard-'+pc.tone+'" onclick="switchParent(\''+pc.id+'\')">'
+      + '<div class="pcard-top"><span class="pcard-name">'+first+'</span><span class="pcard-dot"></span></div>'
+      + '<div class="pcard-row'+(medOk?' good':' warn')+'">Meds: '+medTxt+'</div>'
+      + '<div class="pcard-row'+(pc.checkin?' good':'')+'">'+esc(ci)+'</div>'
+      + '<div class="pcard-row">'+esc(vit)+'</div>'
+      + (pc.open_alerts?'<div class="pcard-alert">'+pc.open_alerts+' need'+(pc.open_alerts>1?'':'s')+' attention</div>':'')
+      + '</button>';
+  }).join('');
+  host.innerHTML = head + '<div class="pboard">'+cards+'</div>';
 }
 async function loadStatusStrip(){
   const host=document.getElementById('statusStrip'); if(!host) return;
@@ -3645,13 +3622,13 @@ async function loadChecklist(){
     const pid = (cared[0]||ME.parents[0]).id;
     const [meds, vit, reps, hh] = await Promise.all([
       j('/api/parents/'+pid+'/medications'), j('/api/parents/'+pid+'/vitals'),
-      j('/api/parents/'+pid+'/reports'), j('/api/households'),
+      j('/api/parents/'+pid+'/reports'), j('/api/families'),
     ]);
     const steps=[
       {done:meds.length>0, label:'Add their medicines', go:"nav_('meds')"},
       {done:vit.length>0, label:'Log one BP or sugar reading', go:"nav_('vitals')"},
       {done:reps.length>0, label:'Upload a report or prescription', go:"nav_('vault')"},
-      {done:(hh[0]&&hh[0].member_count>1)||ME.parents.length>1, label:'Invite the family', go:"nav_('family')"},
+      {done:(hh.families&&hh.families.length>0)||ME.parents.length>1, label:'Invite the family', go:"nav_('family')"},
     ];
     const left=steps.filter(x=>!x.done);
     if(!left.length){ host.innerHTML=''; return; }
@@ -3746,9 +3723,9 @@ async function loadMyDayWarmth(){
       + '<div class="warm-v">'+(last.kind==='voice'?'sent you a voice note — tap My Family to listen':esc((last.body||'').slice(0,120)))+'</div></div>';
   }catch(e){}
   try{
-    const hh = await j('/api/households');
-    if(hh[0]){
-      const evs = await j('/api/households/'+hh[0].id+'/events');
+    const fams = (await j('/api/families')).families;
+    if(fams[0]){
+      const evs = await j('/api/families/'+fams[0].id+'/events');
       const today=new Date().toISOString().slice(0,10);
       const next=(evs||[]).find(e=>e.event_date>=today);
       if(next) html+='<div class="warm-card"><div class="warm-k">📅 '+(next.event_date===today?'Today':new Date(next.event_date+'T00:00').toLocaleDateString('en-IN',{weekday:'long'}))+'</div>'
