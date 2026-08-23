@@ -21,27 +21,34 @@ npm start
 
 ## If you ALREADY have the database (upgrading)
 
-Run every migration you haven't run yet — they're all safe to run again:
+Put your connection string in `.env` (copy `.env.example`), then:
 
 ```bash
-psql -d parentfirst_vault -f db/migrations/001_care_modules.sql
-psql -d parentfirst_vault -f db/migrations/002_engagement.sql
-psql -d parentfirst_vault -f db/migrations/003_booking_fields.sql
-psql -d parentfirst_vault -f db/migrations/004_accounts.sql
-psql -d parentfirst_vault -f db/migrations/005_alerts.sql
-psql -d parentfirst_vault -f db/migrations/006_report_files.sql
-psql -d parentfirst_vault -f db/migrations/007_appointments.sql
-psql -d parentfirst_vault -f db/migrations/008_household.sql
-psql -d parentfirst_vault -f db/migrations/009_med_schedule.sql
-
 npm install
+npm run db:migrate
 npm start
 ```
 
-Tip: to avoid typing the Postgres password at every migration, run once first:
+`db:migrate` applies every migration you haven't run yet, in order, each in its
+own transaction, and records what it applied so re-running is a no-op. To see
+what it would do without touching anything:
+
 ```bash
-export PGPASSWORD='YOURPASSWORD'
+npm run db:migrate -- --dry
 ```
+
+Migration `024` is the one that adds family join codes, the ADMIN role, and the
+columns the full intake form writes to. Until it runs, family actions will error.
+
+## Tests
+
+```bash
+npm run test:routes
+```
+
+Routing and authorization — needs no database. The full architecture suite
+(`npm test`) also runs the family-graph tests, which need `DATABASE_URL`
+pointing at a database it may TRUNCATE. Never point it at production.
 
 ## Then
 
@@ -83,3 +90,27 @@ Change any password with:
 ```bash
 node scripts/reset-password.js <email> <new-password>
 ```
+
+## If your screens look empty
+
+The original demo data (medicines, reports, care team) belongs to the seeded
+"Ramesh Sharma" record. To move it onto the real parent:
+
+```bash
+node scripts/move-demo-data.js
+```
+
+## Running it manually (concierge mode)
+
+While you fulfil bookings by hand:
+
+**1. Get notified.** Add SMTP settings to `.env` so every booking and alert emails you
+(see `.env.example`). For Gmail, create an *App Password* — not your normal password.
+Without SMTP it still prints a loud banner in the server console.
+
+**2. Work the queue.** Admins get a **Requests** tab: every booking and open alert across
+all your families, with the family's phone numbers to tap and call, and status buttons
+to move each one pending → confirmed → done.
+
+**3. Be honest in the product.** Booking confirmations say "we'll call you to confirm" —
+they do not promise instant dispatch. Keep it that way while it's manual.

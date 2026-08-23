@@ -4,10 +4,25 @@ import {
   createFamily, addPersonToFamily, addUserToFamily, addCareRelationship,
   createInvitation, acceptInvitation, resolveParentSignup, linkPersonToUser,
   familiesForUser, personsForUser, accessToPerson, DEFAULT_CAREGIVER_PERMS,
+  joinFamilyByCode, rotateFamilyCode, normaliseCode, isFamilyAdmin, membershipOf,
+  setMemberRole, setCarePermissions, accessMatrix, ROLES, ALL_PERMISSIONS, PERSON_COLS,
 } from './family.js';
+import { saveIntakeProfile } from './care-profile.js';
 
 export default async function familyRoutes(app, { pool }) {
   const uid = (req) => req.user.id;
+
+  // Every admin-only route starts here, so "who may do this" has one answer.
+  const requireAdmin = async (req, reply) => {
+    if (await isFamilyAdmin(pool, req.params.familyId, uid(req))) return true;
+    reply.code(403).send({ error: 'only a family admin can do this' });
+    return false;
+  };
+  const requireMember = async (req, reply) => {
+    if (await membershipOf(pool, req.params.familyId, uid(req))) return true;
+    reply.code(403).send({ error: 'not a member of this family' });
+    return false;
+  };
 
   // ── families the user belongs to (for the family switcher) ──
   app.get('/api/families', async (req) => ({ families: await familiesForUser(pool, uid(req)) }));
@@ -32,38 +47,141 @@ export default async function familyRoutes(app, { pool }) {
     return { persons: rows };
   });
 
-  // ── add a person (a parent) to a family + care relationship from the creator ──
+  // ── add a person to a family, with as much of their intake as the admin has.
+  //    Accepts the full person record plus an optional `profile` block (the
+  //    health & lifestyle answers) so the admin fills everything in one pass. ──
   app.post('/api/families/:familyId/persons', async (req, reply) => {
-    const { name, age, relation, city } = req.body || {};
-    if (!name) return reply.code(400).send({ error: 'name required' });
-    const owner = await pool.query(
-      `SELECT role FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`,
-      [req.params.familyId, uid(req)]);
-    if (!owner.rows[0]) return reply.code(403).send({ error: 'not a member of this family' });
-    const person = await addPersonToFamily(pool, {
-      familyId: req.params.familyId, name, age, relation, city,
-      createdBy: uid(req), caregiverUserId: uid(req),
-    });
+    if (!(await requireAdmin(req, reply))) return;
+    const body = req.body || {};
+    if (!body.name) return reply.code(400).send({ error: 'name required' });
+    const fields = {};
+    for (const k of PERSON_COLS) if (body[k] !== undefined) fields[k] = body[k];
+    let person;
+    try {
+      person = await addPersonToFamily(pool, {
+        familyId: req.params.familyId, person: fields,
+        createdBy: uid(req), caregiverUserId: uid(req),
+      });
+    } catch (e) {
+      return reply.code(e.statusCode || 500).send({ error: e.message });
+    }
+    // the health picture, if the admin filled it in
+    if (body.profile && Object.keys(body.profile).length) {
+      try { await saveIntakeProfile(pool, person.id, body.profile); }
+      catch (e) { req.log.error('intake profile: ' + e.message); }
+    }
     return person;
   });
 
   // ── members of a family ──
   app.get('/api/families/:familyId/members', async (req, reply) => {
+    if (!(await requireMember(req, reply))) return;
     const { rows } = await pool.query(
-      `SELECT fm.role, fm.status, u.id AS user_id, u.name, u.email
+      `SELECT fm.role, fm.status, fm.joined_via, u.id AS user_id, u.name, u.email
        FROM family_memberships fm JOIN users u ON u.id=fm.user_id
-       WHERE fm.family_id=$1 ORDER BY fm.created_at`, [req.params.familyId]);
-    return { members: rows };
+       WHERE fm.family_id=$1 AND fm.status='ACTIVE'
+       ORDER BY CASE fm.role WHEN 'OWNER' THEN 0 WHEN 'ADMIN' THEN 1 ELSE 2 END, fm.created_at`,
+      [req.params.familyId]);
+    return { members: rows, roles: ROLES };
+  });
+
+  // ═══════════ JOIN BY CODE ═══════════
+  // The flow the family actually wants: everyone signs up for themselves,
+  // then types the code the admin gave them. No stub records, no guessing
+  // which invite belongs to whom.
+
+  // public: what family is this code for? (so signup can say the name)
+  app.get('/api/families/code/:code/peek', async (req, reply) => {
+    const code = normaliseCode(req.params.code);
+    if (!code) return reply.code(400).send({ error: 'that code doesn\'t look right' });
+    const { rows } = await pool.query(
+      `SELECT f.name AS family_name,
+              (SELECT count(*) FROM family_memberships WHERE family_id=f.id AND status='ACTIVE') AS member_count,
+              (SELECT u.name FROM users u WHERE u.id=f.created_by) AS created_by_name
+       FROM families f WHERE f.invite_code=$1`, [code]);
+    if (!rows[0]) return reply.code(404).send({ error: 'no family has that code' });
+    return rows[0];
+  });
+
+  // join (must be signed in)
+  app.post('/api/families/join', async (req, reply) => {
+    const { code } = req.body || {};
+    try {
+      const r = await joinFamilyByCode(pool, code, uid(req));
+      return { joined: true, already: r.already, family_id: r.family.id, family_name: r.family.name };
+    } catch (e) {
+      return reply.code(e.statusCode || 400).send({ error: e.message });
+    }
+  });
+
+  // the admin reads the code to share it
+  app.get('/api/families/:familyId/code', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    const { rows } = await pool.query('SELECT invite_code, code_rotated_at FROM families WHERE id=$1',
+      [req.params.familyId]);
+    if (!rows[0]) return reply.code(404).send({ error: 'family not found' });
+    return rows[0];
+  });
+
+  // ...and rotates it when it has been shared too widely
+  app.post('/api/families/:familyId/code/rotate', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    const code = await rotateFamilyCode(pool, req.params.familyId);
+    return { invite_code: code };
+  });
+
+  // ═══════════ ADMIN: ROLES & ACCESS ═══════════
+
+  // the full picture: who is in the family, who they can see, and what they may do
+  app.get('/api/families/:familyId/access', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    return await accessMatrix(pool, req.params.familyId);
+  });
+
+  // change a member's role
+  app.patch('/api/families/:familyId/members/:userId', async (req, reply) => {
+    const { role } = req.body || {};
+    try {
+      const m = await setMemberRole(pool, {
+        familyId: req.params.familyId, targetUserId: req.params.userId,
+        role, actingUserId: uid(req),
+      });
+      return { member: m };
+    } catch (e) {
+      return reply.code(e.statusCode || 400).send({ error: e.message });
+    }
+  });
+
+  // change what a member may do for ONE person
+  app.put('/api/families/:familyId/access/:userId/:personId', async (req, reply) => {
+    try {
+      const cr = await setCarePermissions(pool, {
+        familyId: req.params.familyId, caregiverUserId: req.params.userId,
+        personId: req.params.personId, permissions: (req.body || {}).permissions || {},
+        actingUserId: uid(req),
+      });
+      return { permissions: cr.permissions };
+    } catch (e) {
+      return reply.code(e.statusCode || 400).send({ error: e.message });
+    }
+  });
+
+  // revoke a member's access to one person entirely
+  app.delete('/api/families/:familyId/access/:userId/:personId', async (req, reply) => {
+    if (!(await requireAdmin(req, reply))) return;
+    await pool.query(
+      `DELETE FROM care_relationships WHERE family_id=$1 AND caregiver_user_id=$2 AND person_id=$3`,
+      [req.params.familyId, req.params.userId, req.params.personId]);
+    return { revoked: true };
   });
 
   // ── invite someone to the family (optionally bound to an existing person) ──
   app.post('/api/families/:familyId/invitations', async (req, reply) => {
     const { email, phone, person_id, role, intended_care } = req.body || {};
-    const membership = await pool.query(
-      `SELECT role FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`,
-      [req.params.familyId, uid(req)]);
-    if (!membership.rows[0]) return reply.code(403).send({ error: 'not a member of this family' });
+    if (!(await requireAdmin(req, reply))) return;
     if (!email && !phone) return reply.code(400).send({ error: 'email or phone required' });
+    if (role && !ROLES.includes(role)) return reply.code(400).send({ error: 'unknown role' });
+    if (role === 'OWNER') return reply.code(400).send({ error: 'ownership is transferred, not invited' });
     const inv = await createInvitation(pool, {
       familyId: req.params.familyId, invitedPersonId: person_id || null,
       email, phone, byUserId: uid(req), role: role || 'FAMILY_MEMBER', intendedCare: !!intended_care,
@@ -74,7 +192,12 @@ export default async function familyRoutes(app, { pool }) {
       try {
         const { rows: [fam] } = await pool.query('SELECT name FROM families WHERE id=$1', [req.params.familyId]);
         const { rows: [inviter] } = await pool.query('SELECT name FROM users WHERE id=$1', [uid(req)]);
-        const base = process.env.APP_URL || 'https://parentfirst.onrender.com';
+        // Falling back to a hardcoded host silently sends every invite to the
+        // wrong deployment. Warn rather than pretend.
+        const base = process.env.APP_URL || (() => {
+          req.log.warn('APP_URL is not set — invite links will point at parentfirst.onrender.com');
+          return 'https://parentfirst.onrender.com';
+        })();
         const link = base + '/?invite=' + inv.token;
         const { notifyPeople } = await import('./notify.js');
         await notifyPeople(app, [email.toLowerCase()],
@@ -122,7 +245,7 @@ export default async function familyRoutes(app, { pool }) {
     const { rows } = await pool.query(
       `UPDATE invitations SET status='REVOKED'
        WHERE token=$1 AND status='PENDING'
-         AND family_id IN (SELECT family_id FROM family_memberships WHERE user_id=$2 AND role IN ('OWNER','CAREGIVER'))
+         AND family_id IN (SELECT family_id FROM family_memberships WHERE user_id=$2 AND role IN ('OWNER','ADMIN'))
        RETURNING id`, [req.params.token, uid(req)]);
     if (!rows[0]) return reply.code(404).send({ error: 'nothing to revoke' });
     return { revoked: true };
@@ -131,10 +254,7 @@ export default async function familyRoutes(app, { pool }) {
   // ── establish/adjust a care relationship (owner action) ──
   app.post('/api/families/:familyId/care-relationships', async (req, reply) => {
     const { caregiver_user_id, person_id, relationship, permissions } = req.body || {};
-    const owner = await pool.query(
-      `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role IN ('OWNER','CAREGIVER')`,
-      [req.params.familyId, uid(req)]);
-    if (!owner.rows[0]) return reply.code(403).send({ error: 'only owners/caregivers can assign care' });
+    if (!(await requireAdmin(req, reply))) return;
     const cr = await addCareRelationship(pool, {
       familyId: req.params.familyId, caregiverUserId: caregiver_user_id, personId: person_id,
       relationship, permissions: permissions || DEFAULT_CAREGIVER_PERMS,
@@ -150,15 +270,13 @@ export default async function familyRoutes(app, { pool }) {
 
   // ── family events board (community) ──
   app.get('/api/families/:familyId/events', async (req, reply) => {
-    const m = await pool.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`, [req.params.familyId, uid(req)]);
-    if (!m.rows[0]) return reply.code(403).send({ error: 'not a member' });
+    if (!(await requireMember(req, reply))) return;
     const { rows } = await pool.query(
       `SELECT * FROM events WHERE family_id=$1 ORDER BY event_date`, [req.params.familyId]);
     return rows;
   });
   app.post('/api/families/:familyId/events', async (req, reply) => {
-    const m = await pool.query(`SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`, [req.params.familyId, uid(req)]);
-    if (!m.rows[0]) return reply.code(403).send({ error: 'not a member' });
+    if (!(await requireMember(req, reply))) return;
     const { title, event_date, event_time, place, notes } = req.body || {};
     if (!title || !event_date) return reply.code(400).send({ error: 'title and date required' });
     const { rows } = await pool.query(
@@ -168,6 +286,7 @@ export default async function familyRoutes(app, { pool }) {
     return rows[0];
   });
   app.delete('/api/families/:familyId/events/:id', async (req, reply) => {
+    if (!(await requireMember(req, reply))) return;
     await pool.query(`DELETE FROM events WHERE id=$1 AND family_id=$2`, [req.params.id, req.params.familyId]);
     return { deleted: true };
   });
@@ -242,11 +361,11 @@ export default async function familyRoutes(app, { pool }) {
 
   // ── owner removes a member (not themselves; fixes wrong-role/wrong-person joins) ──
   app.delete('/api/families/:familyId/members/:userId', async (req, reply) => {
-    const owner = await pool.query(
-      `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role='OWNER'`,
-      [req.params.familyId, uid(req)]);
-    if (!owner.rows[0]) return reply.code(403).send({ error: 'only the owner can remove members' });
-    if (req.params.userId === uid(req)) return reply.code(400).send({ error: 'the owner cannot remove themselves' });
+    if (!(await requireAdmin(req, reply))) return;
+    if (req.params.userId === uid(req)) return reply.code(400).send({ error: 'you cannot remove yourself' });
+    const target = await membershipOf(pool, req.params.familyId, req.params.userId);
+    if (!target) return reply.code(404).send({ error: 'that person is not in this family' });
+    if (target.role === 'OWNER') return reply.code(400).send({ error: 'the owner cannot be removed — transfer ownership first' });
     await pool.query(`DELETE FROM care_relationships WHERE family_id=$1 AND caregiver_user_id=$2`,
       [req.params.familyId, req.params.userId]);
     await pool.query(`DELETE FROM family_memberships WHERE family_id=$1 AND user_id=$2`,
@@ -261,10 +380,8 @@ export default async function familyRoutes(app, { pool }) {
 
   // ── owner deletes a family that has no people in it (cleans up empty duplicates) ──
   app.delete('/api/families/:familyId', async (req, reply) => {
-    const owner = await pool.query(
-      `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role='OWNER'`,
-      [req.params.familyId, uid(req)]);
-    if (!owner.rows[0]) return reply.code(403).send({ error: 'only the owner can delete a family' });
+    const me = await membershipOf(pool, req.params.familyId, uid(req));
+    if (!me || me.role !== 'OWNER') return reply.code(403).send({ error: 'only the owner can delete a family' });
     const ppl = await pool.query(`SELECT count(*)::int c FROM persons_in_family WHERE family_id=$1`, [req.params.familyId]);
     if (ppl.rows[0].c > 0) return reply.code(400).send({ error: 'remove the people in this family first' });
     await pool.query(`DELETE FROM families WHERE id=$1`, [req.params.familyId]);

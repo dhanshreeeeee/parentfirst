@@ -677,6 +677,66 @@
   .pcard-alert{ margin-top:0.6rem; font-size:12.5px; font-weight:600; color:var(--red); background:var(--red-light); border-radius:8px; padding:5px 9px; }
 
   .fam-invited{ font-size:11px; background:var(--gold-light); color:#7a5a08; border-radius:10px; padding:2px 9px; font-weight:600; white-space:nowrap; }
+  /* ── location pickers (geo.js) ── */
+  .geo-sel{ width:100%; padding:11px 14px; border:1.5px solid var(--border); border-radius:var(--r);
+            font-size:14px; background:var(--white); font-family:inherit; color:var(--ink);
+            margin-bottom:0.2rem; appearance:none;
+            background-image:url("data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238a827a' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
+            background-repeat:no-repeat; background-position:right 12px center; background-size:16px; padding-right:38px; }
+  input.geo-sel{ background-image:none; padding-right:14px; }
+  .geo-sel:focus{ outline:none; border-color:var(--rust); }
+
+  /* ── family join code ── */
+  .code-box{ background:var(--rust-light); border:1.5px dashed var(--rust); border-radius:var(--r-lg);
+             padding:1rem 1.2rem; margin-bottom:1.2rem; }
+  .code-label{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px; color:var(--rust); margin-bottom:6px; }
+  .code-val{ font-family:var(--font-display); font-size:30px; letter-spacing:4px; font-weight:600; color:var(--ink); }
+  .code-help{ font-size:12.5px; color:var(--ink-muted); margin-top:6px; line-height:1.5; }
+  .code-acts{ display:flex; gap:8px; flex-wrap:wrap; margin-top:0.8rem; }
+  #authCode{ text-transform:uppercase; letter-spacing:3px; font-weight:600; }
+
+  /* ── intake sheet (the full person form) ── */
+  .sheet-bg{ position:fixed; inset:0; background:rgba(26,23,20,0.5); z-index:1900; display:flex;
+             align-items:flex-start; justify-content:center; padding:2rem 1rem; overflow-y:auto; }
+  .sheet{ background:var(--cream); border-radius:var(--r-lg); width:100%; max-width:640px; padding:1.6rem 1.7rem 1.2rem; }
+  .sheet h2{ font-family:var(--font-display); font-size:24px; font-weight:400; margin-bottom:0.2rem; }
+  .sheet-steps{ display:flex; gap:6px; margin:1rem 0 1.3rem; }
+  .sheet-step{ flex:1; height:4px; border-radius:2px; background:var(--border); }
+  .sheet-step.on{ background:var(--rust); }
+  .sheet-sec{ font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px;
+              color:var(--ink-faint); margin:1.4rem 0 0.5rem; padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .sheet-sec:first-of-type{ margin-top:0; }
+  .sheet-body{ max-height:min(58vh,620px); overflow-y:auto; padding-right:4px; }
+  .sheet-acts{ display:flex; gap:9px; margin-top:1.4rem; }
+  .sheet-two{ display:grid; grid-template-columns:1fr 1fr; gap:0 12px; }
+  @media(max-width:520px){ .sheet-two{ grid-template-columns:1fr; } }
+  .cond-grid{ display:flex; flex-wrap:wrap; gap:7px; margin-bottom:0.3rem; }
+  .cond-chip{ background:var(--white); border:1.5px solid var(--border); border-radius:18px;
+              padding:6px 13px; font-size:13px; cursor:pointer; font-family:inherit; color:var(--ink); }
+  .cond-chip.sel{ border-color:var(--rust); background:var(--rust-light); font-weight:600; }
+  .sheet-note{ font-size:12.5px; color:var(--ink-muted); margin:-0.1rem 0 0.7rem; line-height:1.5; }
+
+  /* ── access / roles admin ── */
+  .acc-tabs{ display:flex; gap:6px; margin-bottom:1.2rem; border-bottom:1.5px solid var(--border); }
+  .acc-tab{ background:none; border:none; padding:8px 14px 10px; font-size:13.5px; color:var(--ink-muted);
+            cursor:pointer; border-bottom:2.5px solid transparent; margin-bottom:-1.5px; font-family:inherit; }
+  .acc-tab.on{ color:var(--ink); font-weight:700; border-bottom-color:var(--rust); }
+  .role-pill{ font-size:11px; border-radius:10px; padding:2px 9px; font-weight:600; white-space:nowrap;
+              background:var(--border); color:var(--ink-muted); }
+  .role-pill.admin{ background:var(--rust-light); color:var(--rust); }
+  .role-pill.owner{ background:var(--ink); color:#fff; }
+  .role-sel{ padding:6px 10px; border:1.5px solid var(--border); border-radius:9px; font-size:12.5px;
+             background:var(--white); font-family:inherit; color:var(--ink); }
+  .perm-card{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg);
+              padding:1rem 1.1rem; margin-bottom:0.8rem; }
+  .perm-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:0.5rem; flex-wrap:wrap; }
+  .perm-who{ font-weight:600; font-size:14.5px; }
+  .perm-for{ font-size:12.5px; color:var(--ink-muted); }
+  .perm-grid{ display:flex; flex-wrap:wrap; gap:6px; margin-top:0.6rem; }
+  .perm-chip{ background:var(--cream); border:1.5px solid var(--border); border-radius:16px;
+              padding:5px 11px; font-size:12px; cursor:pointer; font-family:inherit; color:var(--ink-muted); }
+  .perm-chip.on{ border-color:var(--sage); background:var(--sage-light); color:var(--sage); font-weight:600; }
+  .perm-empty{ font-size:12.5px; color:var(--ink-faint); font-style:italic; }
 </style>
 </head>
 <body>
@@ -717,6 +777,11 @@
       </div>
       <label class="dl-label">Your name</label>
       <input class="chat-input" id="authName" placeholder="Dhanshree" style="background:var(--white);width:100%;">
+      <label class="dl-label">Family code <span style="font-weight:400;color:var(--ink-faint);">— if someone gave you one</span></label>
+      <input class="chat-input" id="authCode" maxlength="9" autocomplete="off" placeholder="ABCD-2345"
+             style="background:var(--white);width:100%;" oninput="onCodeTyped()">
+      <div id="authCodeHint" style="font-size:12.5px;color:var(--ink-muted);margin-top:-0.2rem;margin-bottom:0.3rem;line-height:1.5;">
+        Leave it empty to start a new family of your own.</div>
     </div>
     <label class="dl-label">Email</label>
     <input class="chat-input" id="authEmail" type="email" placeholder="you@email.com" style="background:var(--white);width:100%;">
@@ -1300,6 +1365,7 @@ function submitForm(){
   if(_formResolve){ _formResolve(out); _formResolve=null; }
 }
 </script>
+<script src="/geo.js"></script>
 <script>
 const API = '';   // same origin
 let PARENT = null;
@@ -1323,13 +1389,18 @@ function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 function statusCls(s){ return s==='ok'?'flag-ok':(s==='high'?'flag-high':'flag-watch'); }
 function statusLabel(s){ return s==='ok'?'In range':(s==='high'?'High':(s==='low'?'Low':'-')); }
 function myRole(){ return PARENT ? PARENT.role : null; }
-function roleAtLeast(r, need){ const rank={caregiver:1,dependent:2,member:2,admin:3}; return (rank[r]||0)>=(rank[need]||99); }
+function roleAtLeast(r, need){ const rank={viewer:0,caregiver:1,dependent:2,member:2,admin:3}; return (rank[r]||0)>=(rank[need]||99); }
 
 // ═══════════ AUTH ═══════════
 function renderInviteBanner(){
   const b=document.getElementById('inviteBanner'); if(!b) return;
-  const code=sessionStorage.getItem('pf_join_code');
+  const famCode=sessionStorage.getItem('pf_family_code');
+  const code=sessionStorage.getItem('pf_join_code') || famCode;
   if(!code){ b.innerHTML=''; return; }
+  if(famCode){
+    const f=document.getElementById('authCode');
+    if(f && !f.value){ f.value=famCode; try{ onCodeTyped(); }catch(e){} }
+  }
   // someone arriving by invite is almost always new — show them signup
   if(typeof AUTH_MODE!=='undefined' && AUTH_MODE!=='signup' && !window._inviteModeSet){
     window._inviteModeSet = true;
@@ -1356,17 +1427,53 @@ function toggleAuthMode(){
   document.getElementById('authToggleText').textContent = signup ? 'Already have an account?' : 'New here?';
   document.getElementById('authToggleLink').textContent = signup ? 'Sign in' : 'Create an account';
   document.getElementById('authErr').innerHTML = '';
+  if(signup) onCodeTyped();
 }
 let AUTH_BUSY=false;          // blocks double-submits (your bug #2: many clicks = many emails)
 let OTP_COOLDOWN=0;           // seconds left before another code may be sent
 let OTP_TIMER=null;
 
+// ── family code on the signup form ──
+// Typed codes arrive lowercase, spaced, dashless. Normalise as they type and
+// look the family up live, so "did I get it right?" is answered before signup.
+let CODE_PEEK_T=null;
+function normCode(raw){
+  const clean=String(raw||'').toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8);
+  return clean.length>4 ? clean.slice(0,4)+'-'+clean.slice(4) : clean;
+}
+function onCodeTyped(){
+  const el=document.getElementById('authCode');
+  const hint=document.getElementById('authCodeHint');
+  const pos=el.selectionStart, before=el.value;
+  el.value=normCode(el.value);
+  if(el.value.length>before.length) el.setSelectionRange(el.value.length, el.value.length);
+  else try{ el.setSelectionRange(pos,pos); }catch(e){}
+  clearTimeout(CODE_PEEK_T);
+  const code=el.value;
+  if(!code){ hint.textContent='Leave it empty to start a new family of your own.'; hint.style.color='var(--ink-muted)'; return; }
+  if(code.length<9){ hint.textContent='8 letters and numbers, like ABCD-2345.'; hint.style.color='var(--ink-muted)'; return; }
+  hint.textContent='Checking…'; hint.style.color='var(--ink-muted)';
+  CODE_PEEK_T=setTimeout(async ()=>{
+    try{
+      const r=await fetch(API+'/api/families/code/'+encodeURIComponent(code)+'/peek');
+      if(!r.ok) throw new Error('no match');
+      const f=await r.json();
+      hint.innerHTML='\u2713 Joining <b>'+esc(f.family_name)+'</b>'
+        + (f.created_by_name? ' \u00b7 set up by '+esc(f.created_by_name) : '');
+      hint.style.color='var(--sage)';
+    }catch(e){
+      hint.textContent='No family has that code. Check it with whoever invited you.';
+      hint.style.color='var(--red)';
+    }
+  },400);
+}
 function setAuthErr(msg){ document.getElementById('authErr').innerHTML = msg? '<div class="err-box">'+esc(msg)+'</div>' : ''; }
 function setOtpErr(msg){ const e=document.getElementById('otpErr'); if(e) e.innerHTML = msg? '<div class="err-box">'+esc(msg)+'</div>' : ''; }
 
 // Shows the inline OTP panel and starts the 60-second resend cooldown.
-function showOtpStep(email){
+function showOtpStep(email, status){
   VERIFY_CTX = { email, password: document.getElementById('authPassword').value };
+  window._otpStatus = status || {};
   // if they edit the email while the code panel is open, restart the flow —
   // otherwise a typo (code sent to the wrong address) dead-ends until reload
   if(!window._emailWatch){
@@ -1382,7 +1489,23 @@ function showOtpStep(email){
     });
   }
   document.getElementById('otpStep').style.display='block';
-  document.getElementById('otpSentMsg').textContent = 'We sent a 6-digit code to ' + email + '. It works for 10 minutes.';
+  const box=document.getElementById('otpSentMsg');
+  const st=window._otpStatus||{};
+  if(st.dev_code){
+    // SHOW_OTP_IN_UI=1 — local development only, never in production.
+    box.innerHTML='<b>Your code is '+esc(st.dev_code)+'</b><br>'
+      + '<span style="font-size:12px;">Shown here because SHOW_OTP_IN_UI=1 is set. Turn it off before deploying.</span>';
+    box.style.background='var(--gold-light)'; box.style.color='#7a5a08';
+  } else if(st.email_sent===false){
+    // Do not send someone to wait at an inbox that will stay empty.
+    box.innerHTML='<b>We couldn\u2019t email the code.</b><br>'
+      + 'The code was created and is valid \u2014 the send failed. Check the server console for the reason, '
+      + 'or read the code from the <code>email_otps</code> table.';
+    box.style.background='var(--red-light)'; box.style.color='var(--red)';
+  } else {
+    box.textContent = 'We sent a 6-digit code to ' + email + '. It works for 10 minutes.';
+    box.style.background='var(--sage-light)'; box.style.color='var(--sage)';
+  }
   // the signup fields are done with; hide the primary button so there is one obvious next action
   document.getElementById('authBtn').style.display='none';
   setAuthErr('');
@@ -1433,14 +1556,15 @@ async function submitAuth(){
 
   const roleBtn = document.querySelector('#authRole .dchip.sel');
   const signup_role = roleBtn ? roleBtn.dataset.val : 'carer';
+  const join_code = (document.getElementById('authCode').value||'').trim();
   const path = AUTH_MODE==='signup' ? '/api/auth/signup' : '/api/auth/login';
-  const body = AUTH_MODE==='signup' ? {email,password,name,signup_role} : {email,password};
+  const body = AUTH_MODE==='signup' ? {email,password,name,signup_role,join_code} : {email,password};
   try{
     const r = await fetch(API+path, {method:'POST',credentials:'same-origin',
       headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const t = await r.json().catch(()=>({}));
     // unverified account (new signup, or a login on one) -> the code is on its way
-    if(t.needs_verify){ showOtpStep(t.email || email); return; }
+    if(t.needs_verify){ showOtpStep(t.email || email, t); return; }
     if(!r.ok) throw new Error(t.error||'Something went wrong');
     resetAuthCard();
     document.getElementById('authPassword').value='';
@@ -1479,9 +1603,20 @@ async function submitOtp(){
 async function resendOtp(){
   if(OTP_COOLDOWN>0 || !VERIFY_CTX) return;
   try{
-    await j('/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},
+    const r = await j('/api/auth/resend',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email:VERIFY_CTX.email})});
-    document.getElementById('otpSentMsg').textContent='A fresh code is on its way to '+VERIFY_CTX.email+'.';
+    window._otpStatus = r || {};
+    const box=document.getElementById('otpSentMsg');
+    if(r && r.dev_code){
+      box.innerHTML='<b>Your code is '+esc(r.dev_code)+'</b>';
+      box.style.background='var(--gold-light)'; box.style.color='#7a5a08';
+    } else if(r && r.email_sent===false){
+      box.innerHTML='<b>We couldn\u2019t email the code.</b><br>A fresh one was created \u2014 the send failed again.';
+      box.style.background='var(--red-light)'; box.style.color='var(--red)';
+    } else {
+      box.textContent='A fresh code is on its way to '+VERIFY_CTX.email+'.';
+      box.style.background='var(--sage-light)'; box.style.color='var(--sage)';
+    }
     setOtpErr('');
     startOtpCooldown(60);
   }catch(e){ setOtpErr(e.message); }
@@ -1577,6 +1712,7 @@ async function switchParent(id){
   nav_('monitor');
 }
 function paintParent(){
+  try{ checkFamilyPrompt(); }catch(e){}
   if(!PARENT) return;
   const first = (PARENT.name||'').split(' ')[0];
   const mine = ME && ME.user && PARENT.name === ME.user.name;
@@ -1684,7 +1820,7 @@ function nav_(v){
   if(v==='wellness')loadWellness();
   if(v==='vitals'){loadVitals();loadVitalsExtras();}
   if(v==='timeline')loadTimeline();
-  if(v==='ops')loadOps();
+  // (the 'ops' view has no nav entry and no loader — left unreachable on purpose)
   if(v==='family')loadFamily();
   if(['vault','docs','timeline','compare'].includes(v)) renderVaultTabs(v);
   if(v==='community')loadEvents();
@@ -1708,15 +1844,32 @@ async function init(){
   await boot();
 }
 
-// invite deep link — runs before anything else
+// Deep link — runs before anything else. Two different things arrive here:
+//   ?code=ABCD-2345  a FAMILY CODE  (short, typeable, reusable)
+//   ?invite=<token>  an INVITATION  (long, single-use, person-bound)
+// They are stored apart so neither is ever handed to the other's endpoint.
 (function(){
   const params = new URLSearchParams(location.search);
-  const code = params.get('invite') || params.get('join');
-  if(!code) return;
-  sessionStorage.setItem('pf_join_code', code);   // token is case-sensitive — do not alter
-  history.replaceState({}, '', location.pathname);   // keep the code out of the URL bar
+  const raw = params.get('code') || params.get('invite') || params.get('join');
+  if(!raw) return;
+  history.replaceState({}, '', location.pathname);   // keep it out of the URL bar
+  const asCode = String(raw).toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const isFamilyCode = params.has('code') || (asCode.length===8 && !params.has('invite'));
+  if(isFamilyCode){
+    const code = asCode.slice(0,4)+'-'+asCode.slice(4);
+    sessionStorage.setItem('pf_family_code', code);
+    try{
+      fetch('/api/families/code/'+encodeURIComponent(code)+'/peek')
+        .then(r=>r.ok?r.json():null)
+        .then(h=>{ if(h){ window._pfInviteFrom={family_name:h.family_name, invited_by:h.created_by_name};
+                          if(typeof renderInviteBanner==='function') renderInviteBanner(); } })
+        .catch(()=>{});
+    }catch(e){}
+    return;
+  }
+  sessionStorage.setItem('pf_join_code', raw);   // token is case-sensitive — do not alter
   try{
-  fetch('/api/invitations/'+encodeURIComponent(code)+'/peek')
+  fetch('/api/invitations/'+encodeURIComponent(raw)+'/peek')
     .then(r=>r.ok?r.json():null)
     .then(h=>{ if(h){ window._pfInviteFrom = h; if(typeof renderInviteBanner==='function') renderInviteBanner(); } })
     .catch(()=>{});
@@ -1737,6 +1890,13 @@ async function boot(){
     await acceptInviteToken(pendingInvite);
     try{ ME = await j('/api/me'); }catch(e){}
   }
+  // a family code opened while already signed in joins straight away
+  const pendingCode = sessionStorage.getItem('pf_family_code');
+  if(pendingCode && ME && ME.user){
+    sessionStorage.removeItem('pf_family_code');
+    await joinByCode(pendingCode, {quiet:true});
+    try{ ME = await j('/api/me'); }catch(e){}
+  }
   // A user with no person record has nothing to show. Send them to onboarding
   // rather than rendering an app whose every screen reads PARENT.id of null.
   if(!ME || !ME.user || !ME.parents || !ME.parents.length || !ME.user.onboarded){
@@ -1745,32 +1905,105 @@ async function boot(){
     return;
   }
   closeOnb();
-  if(ME.parents.length && ME.parents.every(p=>p.role==='caregiver')){
+  // The stripped-down attendant screen is for a LOCAL_CAREGIVER — the hired
+  // help who ticks off doses and records vitals. Decide from the membership
+  // role, not the per-person one: several roles collapse to 'caregiver' there
+  // (a doctor among them), and a doctor does not belong in the attendant UI.
+  const fams = ME.families || [];
+  if(fams.length && fams.every(f=>f.role==='LOCAL_CAREGIVER')){
     window.location.href='/caregiver'; return;
   }
   // A carer opens the app on the person they look after, not themselves.
-  const mine   = ME.parents.find(p => p.name === ME.user.name);
-  const others = ME.parents.filter(p => p.name !== ME.user.name);
-  PARENT = (!ME.is_dependent && others.length) ? others[0] : (ME.parents[0] || mine || null);
+  // Identity comes from self_parent_id — the server knows which record is
+  // this user's. It used to compare NAMES, which quietly picks the wrong
+  // person the moment a daughter and her mother share one.
+  const mine   = ME.self_parent_id ? ME.parents.find(p => p.id === ME.self_parent_id) : null;
+  const others = ME.parents.filter(p => p.id !== ME.self_parent_id);
+  PARENT = (!ME.is_dependent && others.length) ? others[0] : (mine || ME.parents[0] || null);
   if(!PARENT){ startOnboarding(); return; }        // last guard: never proceed with a null person
   IS_DEPENDENT = !!(ME.is_dependent && PARENT.role==='dependent');
   applyDependentMode();
   paintParent();
-  try{ await applyProfileAdaptations(); }catch(e){}
-  try{ applyRoleUI(); }catch(e){}
-  try{ await loadReports(); }catch(e){}
-  if(!IS_DEPENDENT){ try{ loadMonitor(); }catch(e){} }
+
+  // Each of these used to be `try{ ... }catch(e){}`. When one threw, the screen
+  // simply came up empty and nothing anywhere said why. Now a failure is named
+  // on the console and, if the main screen is among them, shown to the user —
+  // an empty dashboard and a broken dashboard should not look the same.
+  const failed = [];
+  const step = async (label, fn) => {
+    try { await fn(); } catch(e){ console.error('startup — ' + label + ' failed:', e); failed.push(label); }
+  };
+  await step('display settings', () => applyProfileAdaptations());
+  await step('permissions',      () => applyRoleUI());
+  await step('reports',          () => loadReports());
+  if(!IS_DEPENDENT) await step('today\u2019s dashboard', () => loadMonitor());
   nav_(IS_DEPENDENT ? 'me' : 'monitor');
-  try{ startReminders(); }catch(e){}
-  try{ checkFamilyPrompt(); }catch(e){}
+  await step('reminders',   () => startReminders());
+  await step('notice bar',  () => checkFamilyPrompt());
+  if(failed.length) showStartupTrouble(failed);
   try{ enablePush(); }catch(e){}
+}
+
+// Something in startup broke. Say so — with a way out — rather than presenting
+// an empty screen the user has no way to interpret.
+function showStartupTrouble(failed){
+  const box=document.getElementById('famPrompt');
+  if(!box) return;
+  box.style.display='block';
+  box.innerHTML='<b>Some of this page didn\u2019t load.</b><br>'
+    + 'Couldn\u2019t load: ' + esc(failed.join(', ')) + '. '
+    + 'Your data is safe — this is a display problem. '
+    + '<button class="btn-sm" style="margin-top:0.6rem;" onclick="location.reload()">Reload</button>';
+}
+
+// ═══════════ THE NOTICE BAR ═══════════
+// #famPrompt has been styled and in the markup all along, and the call to fill
+// it has been in boot() all along — the function was never written, so it has
+// never once appeared. It exists to answer "why can't I do the thing?" before
+// the question gets asked, because a control that is simply absent is
+// indistinguishable from an app that is broken.
+function checkFamilyPrompt(){
+  const box=document.getElementById('famPrompt');
+  if(!box) return;
+  const show=(html)=>{ box.innerHTML=html; box.style.display='block'; };
+  const hide=()=>{ box.style.display='none'; box.innerHTML=''; };
+
+  if(!ME || !ME.user){ hide(); return; }
+
+  // Nobody to look after yet.
+  if(!ME.parents || !ME.parents.length){
+    show('<b>No one to look after yet.</b><br>'
+      + 'Create a family and add the person you care for, or join an existing one with the code your family admin gave you. '
+      + '<button class="btn-sm" style="margin-top:0.6rem;" onclick="goFamily()">Open Family</button>');
+    return;
+  }
+
+  // View-only on the person currently in view. This is the case that used to
+  // present as "the Add button is missing and I don't know why".
+  if(PARENT && PARENT.role==='viewer'){
+    const fam=PARENT.family_name ? esc(PARENT.family_name) : 'this family';
+    show('<b>You can see ' + esc((PARENT.name||'').split(' ')[0]) + '\u2019s records, but not change them.</b><br>'
+      + 'You joined <b>' + fam + '</b> as a family member, so adding and editing are switched off. '
+      + 'An admin of ' + fam + ' can give you more from <b>Family \u2192 Access</b>.');
+    return;
+  }
+
+  // A local caregiver: can record, cannot manage.
+  if(PARENT && PARENT.role==='caregiver'){
+    show('<b>You have caregiver access.</b><br>'
+      + 'You can record vitals and tick off medicines. Adding documents, editing medicines and managing appointments are an admin\u2019s to do.');
+    return;
+  }
+  hide();
 }
 
 // ═══════════ ONBOARDING WIZARD ═══════════
 let ONB = { step:0, type:'owner', data:{}, profile:{} };
 // Two paths, because a carer and a parent need different things.
 const STEPS_CARER = [
-  { title:'Who do you care for?', sub:"Add the person you look after. You can add their health details and more people later.", fields:'basics' },
+  { title:'Who do you care for?', sub:'The person you look after. You can add more people once you\'re in.', fields:'basics' },
+  { title:'Their daily living', sub:'This tailors the app to them and tells us what support is worth suggesting.', fields:'function' },
+  { title:'Health & lifestyle', sub:'This powers the emergency card, the risk flags and the doctor summary.', fields:'health' },
 ];
 const STEPS_PARENT = [
   { title:'Tell us about you', sub:'A few basics to set up your health vault.', fields:'basics' },
@@ -1803,8 +2036,8 @@ function renderOnb(){
     h += onbInput('name', carer?'Their full name':'Your full name', carer?'e.g. Papa / Sindhoormal':'e.g. Sunita Khandelwal', ONB.data.name||'');
     h += onbInput('age', carer?'Their age':'Your age','e.g. 78',ONB.data.age||'','number');
     if(carer) h += onbChips('relation','Your relation to them',[['father','Father'],['mother','Mother'],['grandfather','Grandfather'],['grandmother','Grandmother'],['other','Other']],ONB.profile.relation);
-    h += onbInput('city', carer?'Where they live':'Where you live','e.g. Bengaluru',ONB.data.city||'');
-    if(!carer) h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
+    h += '<div id="onbGeo"></div>';
+    h += onbInput('phone','Mobile number','e.g. 98xxxxxx01',ONB.data.phone||'');
     h += onbChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']],ONB.profile.gender);
   } else if(s.fields==='function'){
     h += onbChips('mobility','Getting around',[['independent','On my own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']],ONB.profile.mobility);
@@ -1816,14 +2049,26 @@ function renderOnb(){
     h += onbChips('lives_alone','Lives alone?',[['no','No'],['yes','Yes']],ONB.profile.lives_alone===true?'yes':(ONB.profile.lives_alone===false?'no':undefined));
   } else {
     h += onbChips('smoking','Smoking',[['never','Never'],['former','Gave up'],['current','Currently smokes']],ONB.profile.smoking);
+    h += onbChips('tobacco','Chewing tobacco / gutka / khaini',[['never','Never'],['former','Gave up'],['current','Currently uses']],ONB.profile.tobacco);
     h += onbChips('alcohol','Alcohol',[['never','Never'],['occasional','Occasionally'],['regular','Regularly']],ONB.profile.alcohol);
     h += onbChips('diet','Diet',[['vegetarian','Vegetarian'],['non-vegetarian','Non-vegetarian'],['jain','Jain'],['vegan','Vegan']],ONB.profile.diet);
+    h += onbMulti('chronic_conditions','Ongoing conditions — tick all that apply', CHRONIC_CONDITIONS, ONB.profile.chronic_conditions);
     h += onbInput('blood_group','Blood group','e.g. B+',ONB.profile.blood_group||'');
     h += onbInput('allergies','Allergies','e.g. Penicillin, dust',ONB.profile.allergies||'');
-    h += onbInput('conditions','Ongoing conditions','e.g. Diabetes, BP',ONB.profile.conditions||'');
+    h += onbInput('conditions','Anything else not on that list','e.g. chronic back pain since 2019',ONB.profile.conditions||'');
     h += onbChips('text_size','Text size in the app',[['normal','Normal'],['large','Large'],['xlarge','Extra large']],ONB.profile.text_size||'normal');
   }
   document.getElementById('onbBody').innerHTML=h;
+  const geo=document.getElementById('onbGeo');
+  if(geo && window.PFGeo){
+    PFGeo.render(geo, { country:ONB.data.country||'India', state:ONB.data.state||'', city:ONB.data.city||'' });
+  }
+}
+function onbMulti(id,label,opts,sel){
+  const chosen = Array.isArray(sel)? sel : [];
+  return '<label class="dl-label">'+esc(label)+'</label><div class="cond-grid onb-m" data-k="'+id+'">'
+    + opts.map(o=>'<button type="button" class="cond-chip'+(chosen.indexOf(o)>=0?' sel':'')+'" data-val="'+esc(o)+'" onclick="this.classList.toggle(\'sel\')">'+esc(o)+'</button>').join('')
+    + '</div>';
 }
 function onbInput(id,label,ph,val,type){ return '<label class="dl-label">'+esc(label)+'</label><input class="chat-input onb-f" data-k="'+id+'" type="'+(type||'text')+'" placeholder="'+esc(ph)+'" value="'+esc(val||'')+'" style="background:var(--white);width:100%;">'; }
 function onbChips(id,label,opts,sel){
@@ -1841,6 +2086,14 @@ function collectOnb(){
     if(k==='lives_alone') ONB.profile[k] = sel.dataset.val==='yes';
     else ONB.profile[k]=sel.dataset.val;
   });
+  document.querySelectorAll('#onbBody .onb-m').forEach(el=>{
+    ONB.profile[el.dataset.k]=Array.from(el.querySelectorAll('.cond-chip.sel')).map(c=>c.dataset.val);
+  });
+  const geo=document.getElementById('onbGeo');
+  if(geo && window.PFGeo){
+    const g=PFGeo.value(geo);
+    ONB.data.country=g.country; ONB.data.state=g.state; ONB.data.city=g.city;
+  }
 }
 function onbPrev(){ collectOnb(); ONB.step--; renderOnb(); }
 async function onbNextStep(){
@@ -1852,7 +2105,8 @@ async function onbNextStep(){
   try{
     await j('/api/onboarding',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
       name:ONB.data.name, age:ONB.data.age?+ONB.data.age:null,
-      city:ONB.data.city||null, phone:ONB.data.phone||null,
+      city:ONB.data.city||null, state:ONB.data.state||null, country:ONB.data.country||null,
+      phone:ONB.data.phone||null,
       account_type:ONB.role, profile:ONB.profile })});
 
     // group setup happens in the app, not here — one person creates it,
@@ -2276,9 +2530,33 @@ async function loadEmergency(){
 }
 async function raiseSOS(){
   try{
-    await j('/api/parents/'+PARENT.id+'/alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({severity:'sos',message:'SOS raised from the emergency card — please check on '+PARENT.name+' immediately.'})});
-    toast('Your family has been alerted.','success');
+    const r = await j('/api/parents/'+PARENT.id+'/alerts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({severity:'sos',message:'SOS raised from the emergency card — please check on '+PARENT.name+' immediately.'})});
+    const d = r.delivered || {};
+    // This used to say "Your family has been alerted" whether or not anyone
+    // was reached. On an SOS that is the one sentence that must be true.
+    if(d.push || d.email){
+      const how=[d.push?'phone':null, d.email?'email':null].filter(Boolean).join(' and ');
+      toast('Alerted '+d.watchers+' '+(d.watchers===1?'person':'people')+' by '+how+'.','success');
+    } else if(!d.watchers){
+      sosFallback('There is nobody else in this family to alert yet.',
+        'The alert is saved in the app, but no one will be notified until someone else joins.');
+    } else {
+      sosFallback('We could not reach anyone.',
+        'The alert is saved and will show in the app, but the notification did not go out. Call '
+        + esc((PARENT.name||'them').split(' ')[0]) + ' or another family member directly, now.');
+    }
   }catch(e){ toast(e.message,'error'); }
+}
+// A failed SOS is not a toast. It has to stop the person and tell them to call.
+function sosFallback(title, detail){
+  const bg=document.createElement('div'); bg.className='modal-bg open';
+  bg.style.cssText='display:flex;position:fixed;inset:0;z-index:2200;align-items:center;justify-content:center;padding:1.5rem;background:rgba(26,23,20,0.6);';
+  bg.innerHTML='<div class="modal" style="max-width:420px;border-top:5px solid var(--red);">'
+    + '<h2 style="color:var(--red);">'+esc(title)+'</h2>'
+    + '<p class="msub">'+detail+'</p>'
+    + '<div class="modal-actions"><button class="btn-primary" id="sosOk">I understand</button></div></div>';
+  bg.querySelector('#sosOk').onclick=()=>bg.remove();
+  document.body.appendChild(bg);
 }
 function emRow(k,v){ return '<div class="em-row"><div class="em-k">'+k+'</div><div class="em-v">'+(v||'—')+'</div></div>'; }
 
@@ -2761,8 +3039,12 @@ async function delDoc(id){
 const LBL={
   gender:'Gender', mobility:'Getting around', eyesight:'Eyesight', hearing:'Hearing', speech:'Speech',
   memory:'Memory', fall_history:'Falls in the last year', lives_alone:'Lives alone',
-  smoking:'Smoking', alcohol:'Alcohol', diet:'Diet', languages:'Languages', text_size:'Text size',
-  height_cm:'Height (cm)', weight_kg:'Weight (kg)', notes:'Notes'
+  smoking:'Smoking', smoking_years:'Years smoked', tobacco:'Chewing tobacco',
+  alcohol:'Alcohol', alcohol_frequency:'How often', diet:'Diet', activity_level:'How active',
+  sleep_hours:'Sleep (hours)', languages:'Languages', text_size:'Text size',
+  height_cm:'Height (cm)', weight_kg:'Weight (kg)', notes:'Notes',
+  surgeries:'Surgeries & hospital stays', family_history:'Family history',
+  vaccinations:'Vaccinations', insurer:'Health insurer', policy_number:'Policy number'
 };
 const VAL={
   independent:'On their own', stick:'With a stick', walker:'With a walker', wheelchair:'Wheelchair', bedbound:'Mostly in bed',
@@ -2772,7 +3054,9 @@ const VAL={
   none:'None', once:'Once', multiple:'More than once',
   never:'Never', former:'Gave up', current:'Currently smokes', occasional:'Occasionally', regular:'Regularly',
   vegetarian:'Vegetarian','non-vegetarian':'Non-vegetarian', jain:'Jain', vegan:'Vegan',
-  male:'Male', female:'Female', other:'Other', normal:'Normal', large:'Large', xlarge:'Extra large'
+  male:'Male', female:'Female', other:'Other', normal:'Normal', large:'Large', xlarge:'Extra large',
+  sedentary:'Mostly sitting', light:'A short walk', moderate:'Walks daily', active:'Very active',
+  daily:'Daily', weekly:'Weekly', monthly:'Monthly', rarely:'Rarely'
 };
 function pretty(k,v){
   if(v===null||v===undefined||v==='') return '—';
@@ -2783,50 +3067,77 @@ async function loadDetails(){
   document.getElementById('detName').textContent=(PARENT.name||'').split(' ')[0];
   const p = await j('/api/parents/'+PARENT.id+'/profile');
   PROFILE=p||{};
+  // the person record carries identity, address and the emergency essentials;
+  // the care profile carries how they live. Both are shown as one picture.
+  const P = (ME.parents||[]).find(x=>x.id===PARENT.id) || PARENT;
   const groups=[
     ['Basics',['gender','height_cm','weight_kg','languages']],
     ['Daily living',['mobility','eyesight','hearing','speech','memory','fall_history','lives_alone']],
-    ['Lifestyle',['smoking','alcohol','diet']],
+    ['Lifestyle',['smoking','smoking_years','tobacco','alcohol','alcohol_frequency','diet','activity_level','sleep_hours']],
+    ['History',['surgeries','family_history','vaccinations']],
+    ['Insurance',['insurer','policy_number']],
     ['App',['text_size']],
   ];
+  const cell=(k,v)=>'<div class="det-cell"><div class="det-k">'+esc(k)+'</div><div class="det-v">'+esc(v||'—')+'</div></div>';
   let html='';
+
+  const place=[P.address_line,P.city,P.state,P.country,P.pincode].filter(Boolean).join(', ');
+  html+='<div class="det-group"><h4>Who they are</h4><div class="det-grid">'
+    + cell('Age', P.age? P.age+' years':'')
+    + cell('Date of birth', P.dob? fmtDate(P.dob):'')
+    + cell('Relation', P.relation)
+    + cell('Lives at', place)
+    + cell('Mobile', P.phone)
+    + cell('Email', P.email)
+    + '</div></div>';
+
+  // conditions read best as a list of what is actually going on
+  let cond=p.chronic_conditions;
+  if(typeof cond==='string'){ try{ cond=JSON.parse(cond); }catch(e){ cond=[]; } }
+  const condText=[(Array.isArray(cond)&&cond.length? cond.join(', '):''), P.conditions].filter(Boolean).join(' · ');
+  html+='<div class="det-group"><h4>Medical</h4><div class="det-grid">'
+    + cell('Ongoing conditions', condText)
+    + cell('Blood group', P.blood_group)
+    + cell('Allergies', P.allergies)
+    + cell('Doctor', [P.primary_doctor, P.doctor_phone].filter(Boolean).join(' · '))
+    + '</div></div>';
+
+  if(P.emergency_name || P.emergency_phone){
+    html+='<div class="det-group"><h4>Emergency contact</h4><div class="det-grid">'
+      + cell('Name', P.emergency_name) + cell('Phone', P.emergency_phone)
+      + cell('Relation', P.emergency_relation) + '</div></div>';
+  }
+
   for(const [title,keys] of groups){
+    const filled=keys.filter(k=>p[k]!==null && p[k]!==undefined && p[k]!=='');
+    if(!filled.length) continue;
     html+='<div class="det-group"><h4>'+title+'</h4><div class="det-grid">';
-    for(const k of keys) html+='<div class="det-cell"><div class="det-k">'+esc(LBL[k]||k)+'</div><div class="det-v">'+esc(pretty(k,p[k]))+'</div></div>';
+    for(const k of filled) html+=cell(LBL[k]||k, pretty(k,p[k]));
     html+='</div></div>';
   }
-  // medical info lives on the parent record
-  html+='<div class="det-group"><h4>Medical</h4><div class="det-grid">'
-    + '<div class="det-cell"><div class="det-k">Blood group</div><div class="det-v">'+esc(PARENT.blood_group||'—')+'</div></div>'
-    + '<div class="det-cell"><div class="det-k">Allergies</div><div class="det-v">'+esc(PARENT.allergies||'—')+'</div></div>'
-    + '<div class="det-cell"><div class="det-k">Conditions</div><div class="det-v">'+esc(PARENT.conditions||'—')+'</div></div>'
-    + '<div class="det-cell"><div class="det-k">Doctor</div><div class="det-v">'+esc(PARENT.primary_doctor||'—')+'</div></div>'
-    + '</div></div>';
   if(p.notes) html+='<div class="det-group"><h4>Notes</h4><div class="feed-text">'+esc(p.notes)+'</div></div>';
+
+  // an honest nudge when the picture is thin, rather than a page of dashes
+  const missing=[];
+  if(!condText) missing.push('ongoing conditions');
+  if(!p.smoking) missing.push('smoking & alcohol');
+  if(!p.mobility) missing.push('how they get around');
+  if(!P.emergency_name) missing.push('an emergency contact');
+  if(missing.length) html+='<div class="sheet-note" style="margin-top:1rem;">Still missing: '+esc(missing.join(', '))
+    + '. Open <b>Edit details</b> to fill them in — the insights and the emergency card read from these.</div>';
+
   document.getElementById('detBody').innerHTML=html;
   applyRoleUI();
 }
+// One form for the whole person, wherever you open it from.
 async function editProfile(){
-  const p=PROFILE||{};
-  const res=await formModal({
-    title:'Edit details', subtitle:'These shape the emergency card, insights and text size.', submitLabel:'Save',
-    fields:[
-      {id:'mobility',label:'Getting around',options:[{label:'On their own',value:'independent'},{label:'Stick',value:'stick'},{label:'Walker',value:'walker'},{label:'Wheelchair',value:'wheelchair'}]},
-      {id:'eyesight',label:'Eyesight',options:[{label:'Good',value:'good'},{label:'Glasses',value:'glasses'},{label:'Poor',value:'poor'}]},
-      {id:'hearing',label:'Hearing',options:[{label:'Good',value:'good'},{label:'Hearing aid',value:'aid'},{label:'Poor',value:'poor'}]},
-      {id:'smoking',label:'Smoking',options:[{label:'Never',value:'never'},{label:'Gave up',value:'former'},{label:'Currently',value:'current'}]},
-      {id:'alcohol',label:'Alcohol',options:[{label:'Never',value:'never'},{label:'Occasionally',value:'occasional'},{label:'Regularly',value:'regular'}]},
-      {id:'fall_history',label:'Falls in the last year',options:[{label:'None',value:'none'},{label:'Once',value:'once'},{label:'More than once',value:'multiple'}]},
-      {id:'text_size',label:'Text size',options:[{label:'Normal',value:'normal'},{label:'Large',value:'large'},{label:'Extra large',value:'xlarge'}]},
-      {id:'notes',label:'Notes',placeholder:'Anything else worth knowing',value:p.notes||''},
-    ],
+  const P = (ME.parents||[]).find(x=>x.id===PARENT.id) || PARENT;
+  await openIntake(P.family_id || ACTIVE_FAMILY, P, async ()=>{
+    PARENT = (ME.parents||[]).find(x=>x.id===P.id) || PARENT;
+    paintParent();
+    try{ await applyProfileAdaptations(); }catch(e){}
+    loadDetails();
   });
-  if(!res) return;
-  try{
-    await j('/api/parents/'+PARENT.id+'/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(res)});
-    await applyProfileAdaptations();
-    loadDetails(); toast('Details updated.','success');
-  }catch(e){ toast(e.message,'error'); }
 }
 
 // ═══════════ MEDICINE REMINDERS ═══════════
@@ -3214,59 +3525,257 @@ async function loadFamily(){
   if(!families.length){
     body.innerHTML =
       '<div class="fam-empty"><h3>No family care space yet</h3>'
-      + '<p>A family is the shared space that holds everyone — the people being cared for and the people looking after them.</p>'
-      + '<div class="fam-actions"><button class="btn-primary" onclick="createFamilyFlow()">Create a family</button></div></div>';
+      + '<p>A family is the shared space that holds everyone — the people being cared for and the people looking after them. '
+      + 'Create one and you get a code to hand out; everyone else signs up and types it in.</p>'
+      + '<div class="fam-actions"><button class="btn-primary" onclick="createFamilyFlow()">Create a family</button>'
+      + '<button class="btn-out" onclick="joinFamilyPrompt()">I have a family code</button></div></div>';
     return;
   }
-  // active family (first, or remembered)
   const fam = families.find(f=>f.id===ACTIVE_FAMILY) || families[0];
   ACTIVE_FAMILY = fam.id;
-  // switcher (only if more than one)
+  const isAdmin = !!fam.is_admin;
+  const isOwner = fam.role==='OWNER';
+
   let head='';
   if(families.length>1){
     head = '<div class="fam-switch">'+families.map(f=>
       '<button class="fam-chip'+(f.id===fam.id?' on':'')+'" onclick="switchFamily(\''+f.id+'\')">'+esc(f.name)+' <span class="fam-chip-n">'+f.person_count+'</span></button>').join('')+'</div>';
   }
   document.getElementById('famTitle').innerHTML = esc(fam.name);
+
   let persons=[], members=[], invites=[];
   try{ persons = (await j('/api/families/'+fam.id+'/persons')).persons; }catch(e){}
   try{ members = (await j('/api/families/'+fam.id+'/members')).members; }catch(e){}
-  try{ invites = (await j('/api/families/'+fam.id+'/invitations')).invitations; }catch(e){}
-  const inviteForPerson = pid => invites.find(i=>i.invited_person_id===pid);
-  const memberInvites = invites.filter(i=>!i.invited_person_id);
-  const isOwner = fam.role==='OWNER' || fam.role==='CAREGIVER';
-  const pCard=(p)=>'<div class="fam-card"><div class="fam-av">'+esc((p.name||'?')[0])+'</div>'
-    + '<div style="flex:1;"><div class="fam-name">'+esc(p.name)+(p.user_id?' <span class="fam-you">has login</span>':' <span class="fam-managed">managed</span>')+'</div>'
-    + '<div class="fam-meta">'+(p.age?p.age+' · ':'')+(p.relation?esc(p.relation):'')+'</div></div>'
-    + (function(){
-        if(p.user_id) return '';
-        const inv = inviteForPerson(p.id);
-        if(inv) return '<div style="text-align:right;"><span class="fam-invited">Invite sent · waiting</span><br>'
-          + '<button class="fam-swap" style="margin-top:4px;" onclick="copyInviteLink(\''+inv.token+'\')">Copy link</button></div>';
-        return isOwner ? '<button class="fam-swap" onclick="invitePerson(\''+fam.id+'\',\''+p.id+'\',\''+esc(p.name)+'\')">Invite them</button>' : '';
-      })()
+  if(isAdmin){ try{ invites = (await j('/api/families/'+fam.id+'/invitations')).invitations; }catch(e){} }
+  FAM_CACHE = { fam, persons, members, isAdmin, isOwner };
+
+  // ── the code: the one thing an admin actually hands out ──
+  let codeBox='';
+  if(isAdmin && fam.invite_code){
+    codeBox = '<div class="code-box">'
+      + '<div class="code-label">Your family code</div>'
+      + '<div class="code-val" id="famCodeVal">'+esc(fam.invite_code)+'</div>'
+      + '<div class="code-help">Anyone you give this to signs up on ParentFirst, types the code, and lands here '
+      + '— already connected to everyone you look after. You decide what they can do from <b>Access</b>.</div>'
+      + '<div class="code-acts">'
+      + '<button class="btn-out" onclick="copyFamilyCode()">Copy code</button>'
+      + '<a class="btn-out" target="_blank" rel="noopener" href="https://wa.me/?text='+encodeURIComponent(codeShareText(fam))+'">Share on WhatsApp</a>'
+      + '<button class="btn-out" onclick="rotateCode(\''+fam.id+'\')">New code</button>'
+      + '</div></div>';
+  }
+
+  const tab = FAM_TAB || 'people';
+  const tabs = '<div class="acc-tabs">'
+    + '<button class="acc-tab'+(tab==='people'?' on':'')+'" onclick="famTab(\'people\')">People we care for <span class="fam-n">'+persons.length+'</span></button>'
+    + '<button class="acc-tab'+(tab==='members'?' on':'')+'" onclick="famTab(\'members\')">Family &amp; caregivers <span class="fam-n">'+members.length+'</span></button>'
+    + (isAdmin? '<button class="acc-tab'+(tab==='access'?' on':'')+'" onclick="famTab(\'access\')">Access</button>':'')
     + '</div>';
-  const mCard=(m)=>'<div class="fam-card"><div class="fam-av">'+esc((m.name||'?')[0])+'</div>'
-    + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(m.user_id===ME.user.id?' <span class="fam-you">you</span>':'')+'</div>'
-    + '<div class="fam-meta">'+esc(m.email)+' · '+esc(roleLabel(m.role))+'</div></div>'
-    + (isOwner && m.user_id!==ME.user.id ? '<button class="fam-swap" onclick="removeMember(\''+fam.id+'\',\''+m.user_id+'\',\''+esc(m.name)+'\')">Remove</button>':'')
-    + '</div>';
-  body.innerHTML = head
-    + '<div class="fam-sec"><h4>People we care for <span class="fam-n">'+persons.length+'</span></h4>'
-    + (persons.length? persons.map(pCard).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — add the first person.</div>')
-    + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="addPersonFlow(\''+fam.id+'\')">+ Add a person</button>':'')
+
+  let main='';
+  if(tab==='people')      main = famPeopleTab(fam, persons, invites, isAdmin);
+  else if(tab==='members') main = famMembersTab(fam, members, invites, isAdmin, isOwner);
+  else                     main = '<div id="accBody" class="psub">Loading access…</div>';
+
+  body.innerHTML = head + codeBox + tabs + main
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:1rem;">'
+    + '<button class="btn-out" onclick="joinFamilyPrompt()">Join another family with a code</button>'
+    + (isOwner && persons.length===0 ? '<button class="btn-out" style="color:var(--red);border-color:var(--red);" onclick="deleteFamily(\''+fam.id+'\',\''+esc(fam.name)+'\')">Delete this empty family</button>' : '')
     + '</div>'
-    + '<div class="fam-sec"><h4>Family &amp; caregivers <span class="fam-n">'+members.length+'</span></h4>'+members.map(mCard).join('')
+    + '<div class="disclaimer">Everyone in a family can see the people being cared for. What each person may <em>do</em> is set under Access. A caregiver\'s own vault stays private to them.</div>';
+
+  if(tab==='access') loadAccess(fam.id);
+}
+let FAM_TAB='people';
+let FAM_CACHE=null;
+function famTab(t){ FAM_TAB=t; loadFamily(); }
+
+function famPeopleTab(fam, persons, invites, isAdmin){
+  const inviteForPerson = pid => invites.find(i=>i.invited_person_id===pid);
+  const pCard=(p)=>{
+    const where=[p.city,p.state].filter(Boolean).join(', ');
+    let right='';
+    if(!p.user_id && isAdmin){
+      const inv=inviteForPerson(p.id);
+      right = inv
+        ? '<div style="text-align:right;"><span class="fam-invited">Invite sent · waiting</span><br>'
+          + '<button class="fam-swap" style="margin-top:4px;" onclick="copyInviteLink(\''+inv.token+'\')">Copy link</button></div>'
+        : '<button class="fam-swap" onclick="invitePerson(\''+fam.id+'\',\''+p.id+'\',\''+esc(p.name)+'\')">Invite them</button>';
+    }
+    return '<div class="fam-card"><div class="fam-av">'+esc((p.name||'?')[0])+'</div>'
+      + '<div style="flex:1;"><div class="fam-name">'+esc(p.name)
+      + (p.user_id?' <span class="fam-you">has login</span>':' <span class="fam-managed">managed</span>')+'</div>'
+      + '<div class="fam-meta">'+[p.age?p.age+' yrs':'', p.relation?esc(p.relation):'', where?esc(where):''].filter(Boolean).join(' · ')+'</div></div>'
+      + (isAdmin? '<button class="fam-swap" onclick="editPerson(\''+p.id+'\')">Details</button>':'')
+      + right + '</div>';
+  };
+  return '<div class="fam-sec">'
+    + (persons.length? persons.map(pCard).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — add the first person.</div>')
+    + (isAdmin? '<button class="btn-out" style="margin-top:0.6rem;" onclick="addPersonFlow(\''+fam.id+'\')">+ Add a person</button>':'')
+    + '</div>';
+}
+
+function famMembersTab(fam, members, invites, isAdmin, isOwner){
+  const memberInvites = invites.filter(i=>!i.invited_person_id);
+  const mCard=(m)=>{
+    const me = m.user_id===ME.user.id;
+    const cls = m.role==='OWNER'?'owner':(m.role==='ADMIN'?'admin':'');
+    let ctrl='';
+    if(isAdmin && !me && m.role!=='OWNER'){
+      ctrl = '<select class="role-sel" onchange="changeRole(\''+fam.id+'\',\''+m.user_id+'\',this.value,this)">'
+        + FAM_ROLES.map(r=>'<option value="'+r[0]+'"'+(m.role===r[0]?' selected':'')+'>'+esc(r[1])+'</option>').join('')
+        + (isOwner? '<option value="OWNER">Make them the owner</option>':'')
+        + '</select>'
+        + '<button class="fam-swap" onclick="removeMember(\''+fam.id+'\',\''+m.user_id+'\',\''+esc(m.name)+'\')">Remove</button>';
+    } else {
+      ctrl = '<span class="role-pill '+cls+'">'+esc(roleLabel(m.role))+'</span>';
+    }
+    return '<div class="fam-card"><div class="fam-av">'+esc((m.name||'?')[0])+'</div>'
+      + '<div style="flex:1;"><div class="fam-name">'+esc(m.name)+(me?' <span class="fam-you">you</span>':'')+'</div>'
+      + '<div class="fam-meta">'+esc(m.email)+(m.joined_via==='code'?' · joined with the code':'')+'</div></div>'
+      + '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">'+ctrl+'</div></div>';
+  };
+  return '<div class="fam-sec">' + members.map(mCard).join('')
     + memberInvites.map(i=>'<div class="fam-card" style="opacity:0.75;"><div class="fam-av">?</div>'
         + '<div style="flex:1;"><div class="fam-name">'+esc(i.invited_email||'Invited')+' <span class="fam-invited">Invite sent · waiting</span></div>'
         + '<div class="fam-meta">invited by '+esc(i.invited_by||'')+'</div></div>'
         + '<button class="fam-swap" onclick="copyInviteLink(\''+i.token+'\')">Copy link</button></div>').join('')
-    + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="inviteMember(\''+fam.id+'\')">+ Invite a family member</button>':'')
-    + '</div>'
-    + (isOwner && persons.length===0 ? '<button class="btn-out" style="margin-top:0.8rem;color:var(--red);border-color:var(--red);" onclick="deleteFamily(\''+fam.id+'\',\''+esc(fam.name)+'\')">Delete this empty family</button>' : '')
-    + '<div class="disclaimer">Everyone in a family can see the vaults of those being cared for. A caregiver\'s own vault stays private to them.</div>';
+    + (isAdmin? '<div class="sheet-note" style="margin-top:0.9rem;">The simplest way in is the code above. Email invites still work if you’d rather send one.</div>'
+        + '<button class="btn-out" onclick="inviteMember(\''+fam.id+'\')">+ Invite by email</button>':'')
+    + '</div>';
 }
-const ROLE_LABELS={OWNER:'owner',CAREGIVER:'caregiver',FAMILY_MEMBER:'family member',CARE_RECIPIENT:'cared for',LOCAL_CAREGIVER:'local caregiver',DOCTOR:'doctor'};
+
+// Roles an admin can hand out. OWNER is deliberately not in this list —
+// it is transferred, and only by the owner.
+const FAM_ROLES = [
+  ['ADMIN','Admin — can manage everything'],
+  ['CAREGIVER','Caregiver — full day-to-day care'],
+  ['FAMILY_MEMBER','Family member — can see, not change'],
+  ['LOCAL_CAREGIVER','Local caregiver — vitals & medicines only'],
+  ['DOCTOR','Doctor — reads reports, books appointments'],
+  ['CARE_RECIPIENT','Cared for — their own record only'],
+];
+const PERM_LABELS = {
+  VIEW_REPORTS:'See reports', UPLOAD_REPORTS:'Upload reports',
+  VIEW_MEDICINES:'See medicines', MANAGE_MEDICINES:'Manage medicines',
+  VIEW_VITALS:'See vitals', RECORD_VITALS:'Record vitals',
+  MANAGE_APPOINTMENTS:'Appointments', MANAGE_TASKS:'Tasks',
+  VIEW_AI_INSIGHTS:'AI insights', SEND_MESSAGES:'Send messages',
+  EMERGENCY_ACCESS:'Emergency card', CONFIRM_MEDICATION:'Tick off doses',
+};
+
+// ── Access: who can do what, for whom. The admin's control panel. ──
+async function loadAccess(familyId){
+  const host=document.getElementById('accBody'); if(!host) return;
+  let a;
+  try{ a = await j('/api/families/'+familyId+'/access'); }
+  catch(e){ host.innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  ACCESS = a; ACCESS.family_id = familyId;
+  if(!a.persons.length){
+    host.innerHTML='<div class="psub" style="font-size:13px;">Add someone to care for first — access is granted person by person.</div>';
+    return;
+  }
+  let h='<p class="psub" style="font-size:13px;margin-bottom:1.1rem;">Each card is one person’s access to one of the people you care for. '
+    + 'Tap a chip to grant or take it away — it saves as you tap.</p>';
+  for(const m of a.members){
+    const isOwnerRow = m.role==='OWNER';
+    h += '<div class="perm-card"><div class="perm-head">'
+      + '<div><span class="perm-who">'+esc(m.name)+'</span> '
+      + '<span class="role-pill '+(m.role==='OWNER'?'owner':(m.role==='ADMIN'?'admin':''))+'">'+esc(roleLabel(m.role))+'</span></div>'
+      + '<div class="perm-for">'+esc(m.email)+'</div></div>';
+    if(isOwnerRow || m.role==='ADMIN'){
+      h += '<div class="perm-empty">Admins can do everything for everyone. Change their role to limit it.</div>';
+    } else {
+      for(const p of a.persons){
+        if(p.user_id===m.user_id) continue;   // nobody needs permission to be themselves
+        const perms=a.grid[m.user_id+':'+p.id];
+        h += '<div style="margin-top:0.7rem;"><div class="perm-for"><b>'+esc(p.name)+'</b>'
+          + (perms? '' : ' — <span style="color:var(--red);">no access</span>')+'</div>'
+          + '<div class="perm-grid">'
+          + a.permissions.map(k=>'<button type="button" class="perm-chip'+(perms&&perms[k]?' on':'')+'" '
+              + 'onclick="togglePerm(this,\''+m.user_id+'\',\''+p.id+'\',\''+k+'\')">'
+              + esc(PERM_LABELS[k]||k)+'</button>').join('')
+          + '</div></div>';
+      }
+    }
+    h += '</div>';
+  }
+  host.innerHTML=h;
+}
+let ACCESS=null;
+
+async function togglePerm(btn, userId, personId, key){
+  if(!ACCESS) return;
+  const cellKey=userId+':'+personId;
+  const current=Object.assign({}, ACCESS.grid[cellKey]||{});
+  if(current[key]) delete current[key]; else current[key]=true;
+  btn.classList.toggle('on');
+  try{
+    const r=await j('/api/families/'+ACCESS.family_id+'/access/'+userId+'/'+personId,
+      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({permissions:current})});
+    ACCESS.grid[cellKey]=r.permissions||current;
+  }catch(e){
+    btn.classList.toggle('on');   // put it back — the server said no
+    toast(e.message,'error');
+  }
+}
+
+async function changeRole(familyId, userId, role, sel){
+  sel.disabled=true;
+  try{
+    await j('/api/families/'+familyId+'/members/'+userId,
+      {method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({role})});
+    toast('Role updated.','success');
+  }catch(e){
+    toast(e.message,'error');
+  }
+  // Re-read either way — after a refusal the dropdown must show what is true,
+  // not what was clicked.
+  try{ ME=await j('/api/me'); }catch(e){}
+  loadFamily();
+}
+
+function codeShareText(fam){
+  return 'Join our family on ParentFirst — ' + fam.name + '\n\n'
+    + 'Sign up here: ' + location.origin + '/?code=' + encodeURIComponent(fam.invite_code) + '\n'
+    + 'Or sign up and type the code: ' + fam.invite_code;
+}
+function copyFamilyCode(){
+  const v=document.getElementById('famCodeVal').textContent.trim();
+  if(navigator.clipboard&&navigator.clipboard.writeText)
+    navigator.clipboard.writeText(v).then(()=>toast('Code copied.','success')).catch(()=>prompt('Your family code:',v));
+  else prompt('Your family code:',v);
+}
+async function rotateCode(familyId){
+  if(!confirm('Make a new code? The old one stops working immediately — anyone who has it but hasn\'t joined will need the new one.')) return;
+  try{
+    await j('/api/families/'+familyId+'/code/rotate',{method:'POST'});
+    toast('New code created.','success');
+    ME=await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
+}
+
+// Join by code from inside the app (a second family, or a code that arrived late)
+async function joinByCode(code, opts){
+  opts=opts||{};
+  try{
+    const r=await j('/api/families/join',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({code})});
+    ACTIVE_FAMILY=r.family_id;
+    if(!opts.quiet) toast(r.already? 'You\'re already in '+r.family_name+'.' : 'You\'ve joined '+r.family_name+'.','success');
+    return r;
+  }catch(e){
+    if(!opts.quiet) toast(e.message,'error');
+    return null;
+  }
+}
+async function joinFamilyPrompt(){
+  const res=await formModal({ title:'Join a family', subtitle:'Type the code your family admin gave you.',
+    submitLabel:'Join', fields:[{id:'code',label:'Family code',placeholder:'ABCD-2345'}] });
+  if(!res || !res.code) return;
+  const r=await joinByCode(res.code);
+  if(r){ ME=await j('/api/me'); loadFamily(); paintParent(); }
+}
+const ROLE_LABELS={OWNER:'owner',ADMIN:'admin',CAREGIVER:'caregiver',FAMILY_MEMBER:'family member',CARE_RECIPIENT:'cared for',LOCAL_CAREGIVER:'local caregiver',DOCTOR:'doctor'};
 function roleLabel(r){ return ROLE_LABELS[r] || String(r||'').toLowerCase().replace(/_/g,' '); }
 async function switchFamily(id){
   ACTIVE_FAMILY=id;
@@ -3342,21 +3851,25 @@ async function createFamilyFlow(){
     ME = await j('/api/me'); loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
+// Adding a person opens the full intake — the admin fills in everything they
+// know now, and can come back for the rest from the same sheet.
 async function addPersonFlow(familyId){
-  const res = await formModal({ title:'Add a person', subtitle:'Someone you care for. They don\'t need an account.', submitLabel:'Add',
-    fields:[
-      {id:'name', label:'Their name', placeholder:'e.g. Papa'},
-      {id:'age', label:'Age', type:'number'},
-      {id:'relation', label:'Relation to you', placeholder:'e.g. father'},
-    ]});
-  if(!res || !res.name) return;
-  try{
-    await j('/api/families/'+familyId+'/persons',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({name:res.name.trim(), age:res.age?+res.age:null, relation:res.relation||null})});
-    toast('Added.','success');
-    ME = await j('/api/me'); loadFamily(); paintParent();
-  }catch(e){ toast(e.message,'error'); }
+  await openIntake(familyId, null, async ()=>{ loadFamily(); paintParent(); });
 }
+async function editPerson(personId){
+  const p = (FAM_CACHE && FAM_CACHE.persons.find(x=>x.id===personId))
+    || (ME.parents||[]).find(x=>x.id===personId);
+  if(!p){ toast('Could not open that person.','error'); return; }
+  await openIntake(ACTIVE_FAMILY, p, async ()=>{
+    loadFamily();
+    if(PARENT && PARENT.id===personId){
+      PARENT = (ME.parents||[]).find(x=>x.id===personId) || PARENT;
+      paintParent();
+      try{ await applyProfileAdaptations(); }catch(e){}
+    }
+  });
+}
+
 async function invitePerson(familyId, personId, name){
   const res = await formModal({ title:'Invite '+name, subtitle:'They\'ll get a link to join and claim their own record — no duplicate is created.', submitLabel:'Create invite',
     fields:[{id:'email', label:'Their email', placeholder:'name@example.com'}] });
@@ -3379,6 +3892,279 @@ async function inviteMember(familyId){
     loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
+
+// ═══════════ PERSON INTAKE — the full form ═══════════
+// One form, used for both "add a person" and "edit everything about them".
+// Three steps, because asking a family to fill 40 fields on one screen is how
+// you get 40 empty fields. Only the name is required; everything else can be
+// filled in later from the same sheet.
+const CHRONIC_CONDITIONS = [
+  'Diabetes', 'High blood pressure', 'Heart disease', 'Cholesterol', 'Thyroid',
+  'Asthma', 'COPD', 'Arthritis', 'Osteoporosis', 'Kidney disease', 'Liver disease',
+  'Stroke', 'Cancer', 'Parkinson’s', 'Dementia / Alzheimer’s', 'Depression',
+  'Anxiety', 'Anaemia', 'Acidity / GERD', 'Prostate', 'Cataract / Glaucoma', 'Hearing loss',
+];
+
+const INTAKE_STEPS = ['Who they are', 'Health', 'Daily life & lifestyle'];
+let INTAKE = null;   // { personId, familyId, step, data, profile, onDone }
+
+function intakeField(k, label, ph, type, hint){
+  return '<label class="dl-label">'+esc(label)+'</label>'
+    + '<input class="chat-input ik-f" data-k="'+k+'" type="'+(type||'text')+'" placeholder="'+esc(ph||'')+'" '
+    + 'style="background:var(--white);width:100%;">'
+    + (hint? '<div class="sheet-note">'+esc(hint)+'</div>' : '');
+}
+function intakeChips(k, label, opts, hint){
+  return '<label class="dl-label">'+esc(label)+'</label>'
+    + '<div class="chip-row ik-c" data-k="'+k+'">'
+    + opts.map(([v,l])=>'<button type="button" class="dchip" data-val="'+esc(v)+'" onclick="fmPick(this)">'+esc(l)+'</button>').join('')
+    + '</div>' + (hint? '<div class="sheet-note">'+esc(hint)+'</div>' : '');
+}
+function intakeMulti(k, label, opts, hint){
+  return '<label class="dl-label">'+esc(label)+'</label>'
+    + '<div class="cond-grid ik-m" data-k="'+k+'">'
+    + opts.map(o=>'<button type="button" class="cond-chip" data-val="'+esc(o)+'" onclick="this.classList.toggle(\'sel\')">'+esc(o)+'</button>').join('')
+    + '</div>' + (hint? '<div class="sheet-note">'+esc(hint)+'</div>' : '');
+}
+function intakeArea(k, label, ph, hint){
+  return '<label class="dl-label">'+esc(label)+'</label>'
+    + '<textarea class="chat-input ik-f" data-k="'+k+'" rows="2" placeholder="'+esc(ph||'')+'" '
+    + 'style="background:var(--white);width:100%;resize:vertical;font-family:inherit;"></textarea>'
+    + (hint? '<div class="sheet-note">'+esc(hint)+'</div>' : '');
+}
+
+// Open the sheet. `person` non-null = edit; null = add a new person.
+async function openIntake(familyId, person, onDone){
+  let profile = {};
+  if(person && person.id){
+    try{ profile = await j('/api/parents/'+person.id+'/profile') || {}; }catch(e){}
+  }
+  INTAKE = {
+    familyId, personId: person && person.id ? person.id : null, step: 0,
+    data: Object.assign({}, person||{}), profile: profile||{}, onDone: onDone||null,
+  };
+  const bg = document.createElement('div');
+  bg.className='sheet-bg'; bg.id='intakeSheet';
+  bg.innerHTML =
+    '<div class="sheet">'
+    + '<h2 id="ikTitle"></h2><p class="msub" id="ikSub"></p>'
+    + '<div class="sheet-steps" id="ikSteps"></div>'
+    + '<div class="sheet-body" id="ikBody"></div>'
+    + '<div id="ikErr"></div>'
+    + '<div class="sheet-acts">'
+    + '<button class="btn-out" id="ikBack" onclick="intakeBack()">Back</button>'
+    + '<button class="btn-out" onclick="closeIntake()">Cancel</button>'
+    + '<button class="btn-primary" style="flex:1;justify-content:center;" id="ikNext" onclick="intakeNext()">Continue</button>'
+    + '</div></div>';
+  document.body.appendChild(bg);
+  bg.addEventListener('mousedown', (e)=>{ if(e.target===bg) closeIntake(); });
+  renderIntake();
+}
+function closeIntake(){
+  const el=document.getElementById('intakeSheet'); if(el) el.remove();
+  INTAKE=null;
+}
+
+function renderIntake(){
+  const I=INTAKE; if(!I) return;
+  const d=I.data, p=I.profile;
+  const who = d.name ? d.name.split(' ')[0] : 'this person';
+  document.getElementById('ikTitle').textContent =
+    I.personId ? (d.name || 'Edit details') : 'Add a person';
+  document.getElementById('ikSub').textContent = [
+    I.personId ? 'Everything we hold about them. Only the name is required.'
+               : 'Someone you look after. They don’t need an account of their own.',
+    'Their health picture — this is what the emergency card and the insights read from.',
+    'How ' + who + ' lives day to day. The honest answers are the useful ones.',
+  ][I.step];
+  document.getElementById('ikSteps').innerHTML =
+    INTAKE_STEPS.map((_,i)=>'<div class="sheet-step'+(i<=I.step?' on':'')+'"></div>').join('');
+  document.getElementById('ikBack').style.display = I.step>0 ? 'block':'none';
+  document.getElementById('ikNext').textContent = I.step===INTAKE_STEPS.length-1
+    ? (I.personId?'Save':'Add them') : 'Continue';
+  document.getElementById('ikErr').innerHTML='';
+
+  let h='';
+  if(I.step===0){
+    h += '<div class="sheet-sec">Who they are</div>';
+    h += intakeField('name','Full name','e.g. Sindhoormal Khandelwal');
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('age','Age','e.g. 78','number')+'</div>'
+       + '<div>'+intakeField('dob','Date of birth','','date')+'</div></div>';
+    h += intakeChips('relation','Relation to you',[
+      ['father','Father'],['mother','Mother'],['grandfather','Grandfather'],['grandmother','Grandmother'],
+      ['spouse','Spouse'],['uncle','Uncle'],['aunt','Aunt'],['other','Other']]);
+    h += intakeChips('gender','Gender',[['male','Male'],['female','Female'],['other','Other']]);
+
+    h += '<div class="sheet-sec">Where they live</div>';
+    h += '<div id="ikGeo"></div>';
+    h += intakeField('address_line','Address','House / street / area');
+    h += intakeField('pincode','PIN / postal code','e.g. 560034');
+
+    h += '<div class="sheet-sec">How to reach them</div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('phone','Mobile number','e.g. 98xxxxxx01','tel')+'</div>'
+       + '<div>'+intakeField('email','Email','name@example.com','email')+'</div></div>';
+    h += '<div class="sheet-note">An email here lets you invite them later to claim their own record — no duplicate is created.</div>';
+
+    h += '<div class="sheet-sec">Emergency contact</div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('emergency_name','Name','e.g. Ramesh (neighbour)')+'</div>'
+       + '<div>'+intakeField('emergency_phone','Phone','e.g. 98xxxxxx02','tel')+'</div></div>';
+    h += intakeField('emergency_relation','Relation to them','e.g. neighbour, brother');
+  } else if(I.step===1){
+    h += '<div class="sheet-sec">Ongoing conditions</div>';
+    h += intakeMulti('chronic_conditions','Tick everything that applies', CHRONIC_CONDITIONS,
+      'This drives the risk flags and what the doctor summary leads with.');
+    h += intakeArea('conditions','Anything else not on that list','e.g. chronic back pain since 2019');
+
+    h += '<div class="sheet-sec">Essentials</div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('blood_group','Blood group','e.g. B+')+'</div>'
+       + '<div>'+intakeField('height_cm','Height (cm)','e.g. 168','number')+'</div></div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('weight_kg','Weight (kg)','e.g. 64','number')+'</div>'
+       + '<div>'+intakeField('sleep_hours','Sleep (hours a night)','e.g. 6.5','number')+'</div></div>';
+    h += intakeArea('allergies','Allergies','e.g. Penicillin, dust, prawns',
+      'Medicines, food, anything. This shows on the emergency card.');
+
+    h += '<div class="sheet-sec">History</div>';
+    h += intakeArea('surgeries','Surgeries & hospital stays','e.g. Knee replacement 2021, angioplasty 2018');
+    h += intakeArea('family_history','Family history','e.g. father had diabetes, mother had a stroke');
+    h += intakeArea('vaccinations','Vaccinations','e.g. COVID booster Mar 2024, flu shot yearly');
+
+    h += '<div class="sheet-sec">Doctor & insurance</div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('primary_doctor','Primary doctor','e.g. Dr. Anand Rao')+'</div>'
+       + '<div>'+intakeField('doctor_phone','Doctor’s phone','','tel')+'</div></div>';
+    h += '<div class="sheet-two">'
+       + '<div>'+intakeField('insurer','Health insurer','e.g. Star Health')+'</div>'
+       + '<div>'+intakeField('policy_number','Policy number','')+'</div></div>';
+  } else {
+    h += '<div class="sheet-sec">Smoking, tobacco & alcohol</div>';
+    h += intakeChips('smoking','Smoking',[['never','Never'],['former','Gave up'],['current','Currently smokes']]);
+    h += intakeField('smoking_years','Years smoked (if they did)','e.g. 20','number');
+    h += intakeChips('tobacco','Chewing tobacco / gutka / khaini',
+      [['never','Never'],['former','Gave up'],['current','Currently uses']],
+      'Asked separately from smoking — it carries its own risks and is far more common.');
+    h += intakeChips('alcohol','Alcohol',[['never','Never'],['occasional','Occasionally'],['regular','Regularly']]);
+    h += intakeChips('alcohol_frequency','How often, if they do',
+      [['rarely','Rarely'],['monthly','Monthly'],['weekly','Weekly'],['daily','Daily']]);
+
+    h += '<div class="sheet-sec">Getting through the day</div>';
+    h += intakeChips('mobility','Getting around',[['independent','On their own'],['stick','With a stick'],['walker','With a walker'],['wheelchair','Wheelchair'],['bedbound','Mostly in bed']]);
+    h += intakeChips('eyesight','Eyesight',[['good','Good'],['glasses','With glasses'],['poor','Poor'],['blind','Very limited']]);
+    h += intakeChips('hearing','Hearing',[['good','Good'],['aid','Uses a hearing aid'],['poor','Poor'],['deaf','Very limited']]);
+    h += intakeChips('speech','Speech',[['clear','Clear'],['slurred','Slightly unclear'],['limited','Limited'],['nonverbal','Non-verbal']]);
+    h += intakeChips('memory','Memory',[['sharp','Sharp'],['forgetful','A bit forgetful'],['confused','Often confused']]);
+    h += intakeChips('fall_history','Falls in the last year',[['none','None'],['once','Once'],['multiple','More than once']]);
+    h += intakeChips('lives_alone','Lives alone?',[['no','No'],['yes','Yes']]);
+
+    h += '<div class="sheet-sec">Food, movement & the app</div>';
+    h += intakeChips('diet','Diet',[['vegetarian','Vegetarian'],['non-vegetarian','Non-vegetarian'],['jain','Jain'],['vegan','Vegan']]);
+    h += intakeChips('activity_level','How active',[['sedentary','Mostly sitting'],['light','A short walk'],['moderate','Walks daily'],['active','Very active']]);
+    h += intakeField('languages','Languages they speak','e.g. Hindi, Marwari, English');
+    h += intakeChips('text_size','Text size in the app',[['normal','Normal'],['large','Large'],['xlarge','Extra large']]);
+    h += intakeArea('notes','Anything else worth knowing','Habits, temperament, what helps on a bad day');
+  }
+  document.getElementById('ikBody').innerHTML=h;
+  fillIntake();
+  const geo=document.getElementById('ikGeo');
+  if(geo && window.PFGeo){
+    PFGeo.render(geo, { country: INTAKE.data.country || 'India',
+                        state: INTAKE.data.state || '', city: INTAKE.data.city || '' });
+  }
+  document.getElementById('ikBody').scrollTop=0;
+}
+
+// Put what we already know back into the fields. Both the person record and
+// the care profile can hold a key (e.g. `conditions`), so person wins.
+function fillIntake(){
+  const I=INTAKE, src=Object.assign({}, I.profile, I.data);
+  document.querySelectorAll('#ikBody .ik-f').forEach(el=>{
+    const v=src[el.dataset.k];
+    if(v===undefined||v===null) return;
+    el.value = (el.type==='date' && typeof v==='string') ? String(v).slice(0,10) : v;
+  });
+  document.querySelectorAll('#ikBody .ik-c').forEach(el=>{
+    let v=src[el.dataset.k];
+    if(el.dataset.k==='lives_alone') v = v===true?'yes':(v===false?'no':undefined);
+    if(v===undefined||v===null||v==='') return;
+    const btn=el.querySelector('.dchip[data-val="'+String(v).replace(/"/g,'')+'"]');
+    if(btn) fmPick(btn);
+  });
+  document.querySelectorAll('#ikBody .ik-m').forEach(el=>{
+    let v=src[el.dataset.k];
+    if(typeof v==='string'){ try{ v=JSON.parse(v); }catch(e){ v=[]; } }
+    if(!Array.isArray(v)) return;
+    el.querySelectorAll('.cond-chip').forEach(c=>{ if(v.indexOf(c.dataset.val)>=0) c.classList.add('sel'); });
+  });
+}
+
+// Which keys belong on the person record vs. the care profile.
+const PERSON_KEYS = ['name','age','dob','relation','city','state','country','address_line','pincode',
+  'phone','email','blood_group','allergies','conditions','primary_doctor','doctor_phone',
+  'emergency_name','emergency_phone','emergency_relation'];
+
+function collectIntake(){
+  const I=INTAKE;
+  const put=(k,v)=>{ if(PERSON_KEYS.indexOf(k)>=0) I.data[k]=v; else I.profile[k]=v; };
+  document.querySelectorAll('#ikBody .ik-f').forEach(el=>put(el.dataset.k, el.value.trim()));
+  document.querySelectorAll('#ikBody .ik-c').forEach(el=>{
+    const sel=el.querySelector('.dchip.sel'); if(!sel) return;
+    if(el.dataset.k==='lives_alone') I.profile.lives_alone = sel.dataset.val==='yes';
+    else put(el.dataset.k, sel.dataset.val);
+  });
+  document.querySelectorAll('#ikBody .ik-m').forEach(el=>{
+    I.profile[el.dataset.k] = Array.from(el.querySelectorAll('.cond-chip.sel')).map(c=>c.dataset.val);
+  });
+  const geo=document.getElementById('ikGeo');
+  if(geo && window.PFGeo){
+    const g=PFGeo.value(geo);
+    I.data.country=g.country; I.data.state=g.state; I.data.city=g.city;
+  }
+}
+function intakeBack(){ collectIntake(); INTAKE.step--; renderIntake(); }
+
+async function intakeNext(){
+  collectIntake();
+  const I=INTAKE;
+  if(!I.data.name){
+    I.step=0; renderIntake();
+    document.getElementById('ikErr').innerHTML='<div class="err-box">A name is needed — the rest can wait.</div>';
+    return;
+  }
+  if(I.step < INTAKE_STEPS.length-1){ I.step++; renderIntake(); return; }
+
+  const btn=document.getElementById('ikNext');
+  btn.disabled=true; btn.textContent='Saving…';
+  const person={}; PERSON_KEYS.forEach(k=>{ if(I.data[k]!==undefined && I.data[k]!=='') person[k]=I.data[k]; });
+  const profile={}; Object.keys(I.profile).forEach(k=>{
+    const v=I.profile[k];
+    if(v===undefined || v===null || v==='') return;
+    if(Array.isArray(v) && !v.length) return;
+    profile[k]=v;
+  });
+  try{
+    if(I.personId){
+      await j('/api/parents/'+I.personId+'/basics',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(person)});
+      if(Object.keys(profile).length)
+        await j('/api/parents/'+I.personId+'/profile',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)});
+    }else{
+      await j('/api/families/'+I.familyId+'/persons',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(Object.assign({}, person, {profile}))});
+    }
+    const done=I.onDone;
+    closeIntake();
+    toast(I.personId? 'Details saved.' : 'Added to the family.','success');
+    try{ ME=await j('/api/me'); }catch(e){}
+    if(done) await done();
+  }catch(e){
+    document.getElementById('ikErr').innerHTML='<div class="err-box">'+esc(e.message)+'</div>';
+    btn.disabled=false; btn.textContent=I.personId?'Save':'Add them';
+  }
+}
+
 function inviteLink(token){ return location.origin+'/?invite='+encodeURIComponent(token); }
 function inviteText(famName, token){
   return 'Join our family on ParentFirst\n\n'+famName+'\n'+inviteLink(token)+'\n\nOpen the link, sign up, and you\'re in.';

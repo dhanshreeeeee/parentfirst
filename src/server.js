@@ -22,7 +22,11 @@ import webpush from 'web-push';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPORTS_DIR = path.join(__dirname, '..', 'data', 'reports');
+// Where uploaded files live. Local dev keeps them in ./data; a host with an
+// ephemeral filesystem (Render, Fly, Heroku) MUST point DATA_DIR at a mounted
+// disk or every report vanishes on the next deploy.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const REPORTS_DIR = path.join(DATA_DIR, 'reports');
 // local calendar date (Postgres DATE columns are timezone-sensitive)
 const localDateStr = (d = new Date()) =>
   new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -32,7 +36,11 @@ const pool = new pg.Pool({
     process.env.DATABASE_URL ||
     `postgres://${process.env.USER || 'postgres'}@localhost:5432/parentfirst_vault`,
   // most hosted Postgres (Railway, Render, Neon, Supabase) requires SSL
-  ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
+  // Hosted Postgres needs TLS. This used to require PGSSL=require to be set by
+  // hand; forgetting it produced a connection error that named nothing useful.
+  ssl: (process.env.PGSSL === 'require'
+        || /render\.com|neon\.tech|supabase|amazonaws|railway/.test(process.env.DATABASE_URL || ''))
+    ? { rejectUnauthorized: false } : undefined,
   max: 10,
 });
 
@@ -620,7 +628,7 @@ await app.register(careRoutes, {
 
 
 // ── document vault: upload & download ───────────────────────────
-const DOCS_DIR = path.join(__dirname, '..', 'data', 'documents');
+const DOCS_DIR = path.join(DATA_DIR, 'documents');
 
 app.post('/api/parents/:parentId/documents', async (req, reply) => {
   if (!roleAtLeast(req.parentRole, 'member')) return reply.code(403).send({ error: 'member access required' });
@@ -844,7 +852,7 @@ app.get('/api/messages/:id/media', async (req, reply) => {
 // ── web push (PWA notifications) ──
 // Keys persist in data/ so subscriptions survive restarts. Set VAPID_PUBLIC/
 // VAPID_PRIVATE in .env to pin them explicitly.
-const VAPID_FILE = path.join(__dirname, '..', 'data', 'vapid.json');
+const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
 let VAPID = null;
 if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
   VAPID = { publicKey: process.env.VAPID_PUBLIC, privateKey: process.env.VAPID_PRIVATE };
@@ -854,6 +862,17 @@ if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
   VAPID = webpush.generateVAPIDKeys();
   fs.mkdirSync(path.dirname(VAPID_FILE), { recursive: true });
   fs.writeFileSync(VAPID_FILE, JSON.stringify(VAPID));
+  // Fresh keys invalidate every existing subscription. On a host whose disk is
+  // wiped each deploy that happens EVERY time, silently, and reminders simply
+  // stop arriving. Refuse to start rather than fail quietly.
+  if (process.env.NODE_ENV === 'production' && !process.env.DATA_DIR) {
+    console.error('\nFATAL: generated new push keys with no persistent storage.');
+    console.error('Every existing push subscription would break on this deploy.\n');
+    console.error('Fix it one of two ways:');
+    console.error('  • set VAPID_PUBLIC and VAPID_PRIVATE (generate: npm run vapid), or');
+    console.error('  • set DATA_DIR to a mounted persistent disk\n');
+    process.exit(1);
+  }
 }
 webpush.setVapidDetails('mailto:' + (process.env.NOTIFY_FROM || 'care@parentfirst.app'),
   VAPID.publicKey, VAPID.privateKey);

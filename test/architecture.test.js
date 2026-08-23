@@ -7,6 +7,8 @@ import {
   createFamily, addPersonToFamily, addUserToFamily, addCareRelationship,
   linkPersonToUser, createInvitation, acceptInvitation, resolveParentSignup,
   accessToPerson, can, personsForUser, familiesForUser,
+  joinFamilyByCode, rotateFamilyCode, normaliseCode, generateFamilyCode,
+  setMemberRole, setCarePermissions, accessMatrix, isFamilyAdmin,
 } from '../src/family.js';
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
@@ -224,6 +226,163 @@ async function reset() {
     const inv = await createInvitation(pool, { familyId: fam.id, email: 'x@t.com', byUserId: d.id, role: 'CAREGIVER' });
     const results = await Promise.allSettled(us.map(u => acceptInvitation(pool, inv.token, u.id)));
     assert.equal(results.filter(r => r.status === 'fulfilled').length, 1, 'only one of four won');
+  });
+
+  // ── join by code, roles, and per-person access ──────────────────────
+
+  await test('S19: every family gets a unique, typeable join code', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D');
+    const fam = await createFamily(pool, d.id, 'K');
+    assert.ok(/^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(fam.invite_code), 'code is XXXX-XXXX');
+    assert.ok(!/[O0I1L]/.test(fam.invite_code), 'no characters that get misread aloud');
+    const codes = new Set();
+    for (let i = 0; i < 200; i++) codes.add(generateFamilyCode());
+    assert.equal(codes.size, 200, 'no collisions in 200 draws');
+  });
+
+  await test('S20: codes are read forgivingly — lowercase, spaced, dashless all match', async () => {
+    assert.equal(normaliseCode('abcd2345'), 'ABCD-2345');
+    assert.equal(normaliseCode('  abcd 2345 '), 'ABCD-2345');
+    assert.equal(normaliseCode('ABCD-2345'), 'ABCD-2345');
+    assert.equal(normaliseCode('ABC-234'), null, 'too short is rejected, not padded');
+  });
+
+  await test('S21: joining by code MAPS the joiner to everyone in the family', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    const papa = await addPersonToFamily(pool, { familyId: fam.id, name: 'Papa', createdBy: d.id, caregiverUserId: d.id });
+    const mama = await addPersonToFamily(pool, { familyId: fam.id, name: 'Mama', createdBy: d.id, caregiverUserId: d.id });
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    assert.equal(await count(`SELECT count(*) c FROM family_memberships WHERE family_id=$1 AND user_id=$2`, [fam.id, bro.id]), 1);
+    // the bug this fixes: a member who joins but is connected to nobody
+    assert.equal(await count(`SELECT count(*) c FROM care_relationships WHERE family_id=$1 AND caregiver_user_id=$2`, [fam.id, bro.id]), 2);
+    assert.ok(await accessToPerson(pool, bro.id, papa.id), 'can reach Papa');
+    assert.ok(await accessToPerson(pool, bro.id, mama.id), 'can reach Mama');
+  });
+
+  await test('S22: a person added AFTER someone joined is mapped to them too', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    const mama = await addPersonToFamily(pool, { familyId: fam.id, name: 'Mama', createdBy: d.id, caregiverUserId: d.id });
+    assert.ok(await accessToPerson(pool, bro.id, mama.id), 'existing members see new people');
+  });
+
+  await test('S23: a code alone never makes you an admin', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    await joinFamilyByCode(pool, fam.invite_code, bro.id, { role: 'ADMIN' });
+    assert.equal(await isFamilyAdmin(pool, fam.id, bro.id), false);
+    assert.equal(await isFamilyAdmin(pool, fam.id, d.id), true);
+  });
+
+  await test('S24: a wrong code joins nothing', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D');
+    await createFamily(pool, d.id, 'K');
+    const bro = await mkUser('b@t.com', 'Bro');
+    await assert.rejects(() => joinFamilyByCode(pool, 'ZZZZ-9999', bro.id), /no family has that code/);
+    await assert.rejects(() => joinFamilyByCode(pool, 'nope', bro.id), /doesn't look right/);
+    assert.equal(await count(`SELECT count(*) c FROM family_memberships WHERE user_id=$1`, [bro.id]), 0);
+  });
+
+  await test('S25: rotating the code retires the old one', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    const old = fam.invite_code;
+    const fresh = await rotateFamilyCode(pool, fam.id);
+    assert.notEqual(fresh, old);
+    await assert.rejects(() => joinFamilyByCode(pool, old, bro.id), /no family has that code/);
+    await joinFamilyByCode(pool, fresh, bro.id);
+    assert.equal(await count(`SELECT count(*) c FROM family_memberships WHERE user_id=$1`, [bro.id]), 1);
+  });
+
+  await test('S26: only an admin changes roles, and the change resets access', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const sis = await mkUser('s@t.com', 'Sis');
+    const fam = await createFamily(pool, d.id, 'K');
+    const papa = await addPersonToFamily(pool, { familyId: fam.id, name: 'Papa', createdBy: d.id, caregiverUserId: d.id });
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    await joinFamilyByCode(pool, fam.invite_code, sis.id);
+    // a plain member cannot promote anyone
+    await assert.rejects(() => setMemberRole(pool, { familyId: fam.id, targetUserId: sis.id, role: 'ADMIN', actingUserId: bro.id }), /only an admin/);
+    // view-only on arrival
+    let acc = await accessToPerson(pool, bro.id, papa.id);
+    assert.ok(!can(acc, 'MANAGE_MEDICINES'), 'family members only look');
+    await setMemberRole(pool, { familyId: fam.id, targetUserId: bro.id, role: 'CAREGIVER', actingUserId: d.id });
+    acc = await accessToPerson(pool, bro.id, papa.id);
+    assert.ok(can(acc, 'MANAGE_MEDICINES'), 'a caregiver can manage medicines');
+  });
+
+  await test('S27: a family is never left without an owner', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    await assert.rejects(() => setMemberRole(pool, { familyId: fam.id, targetUserId: d.id, role: 'ADMIN', actingUserId: d.id }), /make someone else the owner/);
+    // transferring hands it over and steps the old owner down to admin
+    await setMemberRole(pool, { familyId: fam.id, targetUserId: bro.id, role: 'OWNER', actingUserId: d.id });
+    assert.equal(await count(`SELECT count(*) c FROM family_memberships WHERE family_id=$1 AND role='OWNER'`, [fam.id]), 1);
+    assert.equal(await count(`SELECT count(*) c FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND role='ADMIN'`, [fam.id, d.id]), 1);
+  });
+
+  await test('S28: an admin sets permissions person by person', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    const papa = await addPersonToFamily(pool, { familyId: fam.id, name: 'Papa', createdBy: d.id, caregiverUserId: d.id });
+    const mama = await addPersonToFamily(pool, { familyId: fam.id, name: 'Mama', createdBy: d.id, caregiverUserId: d.id });
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    await setCarePermissions(pool, { familyId: fam.id, caregiverUserId: bro.id, personId: papa.id,
+      permissions: { VIEW_REPORTS: true, RECORD_VITALS: true, NOT_A_REAL_PERMISSION: true }, actingUserId: d.id });
+    const onPapa = await accessToPerson(pool, bro.id, papa.id);
+    assert.ok(can(onPapa, 'RECORD_VITALS'), 'granted on Papa');
+    assert.ok(!onPapa.permissions.NOT_A_REAL_PERMISSION, 'unknown permissions are dropped, not stored');
+    const onMama = await accessToPerson(pool, bro.id, mama.id);
+    assert.ok(!can(onMama, 'RECORD_VITALS'), 'Mama is untouched — access is per person');
+    // and a non-admin cannot grant themselves anything
+    await assert.rejects(() => setCarePermissions(pool, { familyId: fam.id, caregiverUserId: bro.id,
+      personId: mama.id, permissions: { MANAGE_MEDICINES: true }, actingUserId: bro.id }), /only an admin/);
+  });
+
+  await test('S29: the access matrix reports who can do what', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D'); const bro = await mkUser('b@t.com', 'Bro');
+    const fam = await createFamily(pool, d.id, 'K');
+    const papa = await addPersonToFamily(pool, { familyId: fam.id, name: 'Papa', createdBy: d.id, caregiverUserId: d.id });
+    await joinFamilyByCode(pool, fam.invite_code, bro.id);
+    const m = await accessMatrix(pool, fam.id);
+    assert.equal(m.members.length, 2);
+    assert.equal(m.members[0].role, 'OWNER', 'the owner is listed first');
+    assert.equal(m.persons.length, 1);
+    assert.ok(m.grid[`${bro.id}:${papa.id}`], 'the brother has a cell for Papa');
+    assert.ok(m.permissions.includes('MANAGE_MEDICINES'));
+  });
+
+  await test('S30: the full intake round-trips onto the person record', async () => {
+    await reset();
+    const d = await mkUser('d@t.com', 'D');
+    const fam = await createFamily(pool, d.id, 'K');
+    const papa = await addPersonToFamily(pool, { familyId: fam.id, createdBy: d.id, caregiverUserId: d.id,
+      person: { name: 'Papa', age: 78, city: 'Bengaluru', state: 'Karnataka', country: 'India',
+                pincode: '560034', phone: '9800000001', blood_group: 'B+',
+                emergency_name: 'Ramesh', emergency_phone: '9800000002' } });
+    assert.equal(papa.state, 'Karnataka');
+    assert.equal(papa.country, 'India');
+    assert.equal(papa.pincode, '560034');
+    assert.equal(papa.emergency_name, 'Ramesh');
+    await pool.query(`INSERT INTO care_profiles (parent_id, smoking, tobacco, alcohol, chronic_conditions)
+                      VALUES ($1,'current','former','occasional','["Diabetes","Thyroid"]'::jsonb)`, [papa.id]);
+    const { rows: [cp] } = await pool.query('SELECT * FROM care_profiles WHERE parent_id=$1', [papa.id]);
+    assert.equal(cp.smoking, 'current');
+    assert.equal(cp.tobacco, 'former');
+    assert.deepEqual(cp.chronic_conditions, ['Diabetes', 'Thyroid']);
   });
 
   console.log(`\n${passed} passed, ${failed} failed\n`);

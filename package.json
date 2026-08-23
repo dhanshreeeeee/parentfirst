@@ -4,10 +4,14 @@
   "description": "ParentFirst Health Vault - AI-powered medical report vault",
   "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/routes.test.js && node test/architecture.test.js",
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "db:setup": "psql -d parentfirst_vault -f db/schema.sql"
+    "db:setup": "psql -d parentfirst_vault -f db/schema.sql",
+    "test:routes": "node test/routes.test.js",
+    "db:migrate": "node scripts/migrate.js",
+    "vapid": "node scripts/vapid.js",
+    "render-start": "node scripts/migrate.js && node src/server.js"
   },
   "keywords": [],
   "author": "",
@@ -27,5 +31,8 @@
     "pdf-parse": "^2.4.5",
     "pg": "^8.22.0",
     "web-push": "^3.6.7"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

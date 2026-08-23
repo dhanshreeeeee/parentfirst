@@ -4,7 +4,7 @@
 // - family_members maps a user to a parent with a role
 import crypto from 'node:crypto';
 import fp from 'fastify-plugin';
-import { accessToPerson } from './family.js';
+import { accessToPerson, joinFamilyByCode, normaliseCode } from './family.js';
 
 const COOKIE = 'pf_session';
 const SESSION_DAYS = 30;
@@ -37,9 +37,18 @@ async function createSession(pool, userId) {
 // dependent = the elder themselves. They get member-level rights over their OWN
 // record (book care, upload, edit details) but never admin rights (inviting family,
 // changing roles). Medicines are special-cased so they can manage their own.
-const RANK = { caregiver: 1, dependent: 2, member: 2, admin: 3 };
+const RANK = { viewer: 0, caregiver: 1, dependent: 2, member: 2, admin: 3 };
 export function roleAtLeast(role, needed) {
   return (RANK[role] || 0) >= (RANK[needed] || 99);
+}
+
+// The permission set is the source of truth; this collapses it to the coarse
+// role the older handlers ask for. Anything that can only look is a viewer.
+export function roleFromPermissions(perms) {
+  const p = perms || {};
+  if (p.MANAGE_MEDICINES || p.UPLOAD_REPORTS) return 'admin';
+  if (p.RECORD_VITALS || p.CONFIRM_MEDICATION || p.MANAGE_APPOINTMENTS) return 'caregiver';
+  return 'viewer';
 }
 
 // Create a default admin + link existing parents, so first run has a login.
@@ -76,6 +85,7 @@ async function authPluginImpl(app, { pool }) {
       url === '/api/health' ||
       url.startsWith('/api/auth/') ||
       url.match(/^\/api\/invitations\/[^/]+\/peek$/) ||
+      url.match(/^\/api\/families\/code\/[^/]+\/peek$/) ||
       url === '/api/push/vapid-key' ||
       url === '/api/activities';
 
@@ -100,10 +110,11 @@ async function authPluginImpl(app, { pool }) {
       const access = await accessToPerson(pool, req.user.id, parentId);
       if (!access) return reply.code(403).send({ error: 'no access to this person' });
       req.access = access;
-      // back-compat: old routes read req.parentRole ('admin'|'member'|'dependent').
-      // Map from the new model so existing handlers keep working unchanged.
-      req.parentRole = access.self ? 'dependent'
-        : (access.permissions && access.permissions.MANAGE_MEDICINES) ? 'admin' : 'member';
+      // back-compat: older routes read req.parentRole ('admin'|'member'|'dependent').
+      // Derive it from the permissions the admin actually granted, so that a
+      // view-only member is a VIEWER here too — otherwise the Access screen
+      // would promise a restriction these routes don't enforce.
+      req.parentRole = access.self ? 'dependent' : roleFromPermissions(access.permissions);
     }
   });
 
@@ -111,10 +122,24 @@ async function authPluginImpl(app, { pool }) {
   app.post('/api/auth/signup', {
     config: { rateLimit: { max: 20, timeWindow: '10 minutes' } },
   }, async (req, reply) => {
-    const { email, name, password, account_type, signup_role } = req.body || {};
+    const { email, name, password, account_type, signup_role, join_code } = req.body || {};
     if (!email || !name || !password) return reply.code(400).send({ error: 'email, name, password required' });
     if (password.length < 8) return reply.code(400).send({ error: 'password must be at least 8 characters' });
     const role = signup_role || account_type || 'carer';   // the human's self-description; onboarding uses it
+
+    // A family code is checked HERE, not after the email dance — a typo should
+    // cost one correction, not a whole signup.
+    let pendingCode = null;
+    if (join_code && String(join_code).trim()) {
+      pendingCode = normaliseCode(join_code);
+      if (!pendingCode) {
+        return reply.code(400).send({ error: 'That family code doesn\'t look right — it\'s 8 letters and numbers, like ABCD-2345.' });
+      }
+      const { rows: fam } = await pool.query('SELECT 1 FROM families WHERE invite_code=$1', [pendingCode]);
+      if (!fam[0]) {
+        return reply.code(400).send({ error: 'No family has that code. Check it with whoever invited you.' });
+      }
+    }
     const exists = await pool.query('SELECT id, verified FROM users WHERE email=$1', [email.toLowerCase()]);
     if (exists.rows[0]) {
       // A VERIFIED account is taken — sign in instead. But an UNVERIFIED one
@@ -123,22 +148,37 @@ async function authPluginImpl(app, { pool }) {
       if (exists.rows[0].verified) {
         return reply.code(409).send({ error: 'an account with this email already exists — sign in instead' });
       }
-      await pool.query('UPDATE users SET name=$2, password_hash=$3, signup_role=$4 WHERE id=$1',
-        [exists.rows[0].id, name, hashPassword(password), role]);
-      try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
-      return { needs_verify: true, email: email.toLowerCase() };
+      await pool.query('UPDATE users SET name=$2, password_hash=$3, signup_role=$4, pending_join_code=$5 WHERE id=$1',
+        [exists.rows[0].id, name, hashPassword(password), role, pendingCode]);
+      let r = null;
+      try { r = await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
+      return { needs_verify: true, email: email.toLowerCase(), ...otpStatus(r) };
     }
     const { rows } = await pool.query(
-      'INSERT INTO users (email, name, password_hash, verified, signup_role) VALUES ($1,$2,$3,false,$4) RETURNING id, email, name',
-      [email.toLowerCase(), name, hashPassword(password), role]);
-    try { await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
-    return { needs_verify: true, email: rows[0].email };
+      'INSERT INTO users (email, name, password_hash, verified, signup_role, pending_join_code) VALUES ($1,$2,$3,false,$4,$5) RETURNING id, email, name',
+      [email.toLowerCase(), name, hashPassword(password), role, pendingCode]);
+    let sendResult = null;
+    try { sendResult = await sendOtp(email.toLowerCase(), 'verify'); } catch (e) { app.log.error('otp send: ' + e.message); }
+    return { needs_verify: true, email: rows[0].email, ...otpStatus(sendResult) };
   });
 
   // ── email OTP: prove the address is theirs ──
   const OTP_TTL_MIN = 10;
   const genCode = () => String(Math.floor(100000 + Math.random() * 900000));
 
+  // Local-only escape hatch. Strictly opt-in and refused in production: an app
+  // that can print verification codes to the browser is an app anyone can log
+  // in to. Off unless SHOW_OTP_IN_UI=1 is set deliberately.
+  const OTP_IN_UI = process.env.SHOW_OTP_IN_UI === '1' && process.env.NODE_ENV !== 'production';
+  if (process.env.SHOW_OTP_IN_UI === '1' && process.env.NODE_ENV === 'production') {
+    app.log.error('SHOW_OTP_IN_UI=1 ignored — it is never allowed in production.');
+  } else if (OTP_IN_UI) {
+    app.log.warn('SHOW_OTP_IN_UI=1 — verification codes will be shown in the browser. Local development only.');
+  }
+
+  // Returns whether the mail actually went out. The caller needs to know:
+  // telling someone to check an inbox that will stay empty is the difference
+  // between a five-second wait and a lost afternoon.
   async function sendOtp(email, purpose) {
     const code = genCode();
     await pool.query('DELETE FROM email_otps WHERE email=$1 AND purpose=$2', [email, purpose]);
@@ -147,12 +187,24 @@ async function authPluginImpl(app, { pool }) {
        VALUES ($1,$2,$3, now() + interval '${OTP_TTL_MIN} minutes')`, [email, code, purpose]);
     const subject = purpose === 'reset' ? 'Your password reset code' : 'Confirm your email';
     const { notifyPeople } = await import('./notify.js');
-    await notifyPeople(app, [email], subject, [
+    const r = await notifyPeople(app, [email], subject, [
       `Your ParentFirst code is: ${code}`,
       '',
       `It works for ${OTP_TTL_MIN} minutes. If you didn't ask for this, ignore it.`,
     ]);
+    const sent = !!(r && r.sent);
+    if (!sent) {
+      app.log.error(`OTP for ${email} was NOT emailed (${(r && r.reason) || 'unknown'}). ` +
+        `The code is in the banner above and in the email_otps table.`);
+    }
+    return { sent, code };
   }
+
+  // What the browser is allowed to learn about a send.
+  const otpStatus = (r) => ({
+    email_sent: !!(r && r.sent),
+    ...(OTP_IN_UI && r ? { dev_code: r.code } : {}),
+  });
 
   async function checkOtp(email, purpose, code) {
     const { rows } = await pool.query(
@@ -190,8 +242,8 @@ async function authPluginImpl(app, { pool }) {
     const { rows } = await pool.query('SELECT verified FROM users WHERE email=$1', [email.toLowerCase()]);
     if (!rows[0]) return { sent: true };   // don't reveal which emails exist
     if (purpose !== 'reset' && rows[0].verified) return { sent: true };
-    await sendOtp(email.toLowerCase(), purpose === 'reset' ? 'reset' : 'verify');
-    return { sent: true };
+    const r = await sendOtp(email.toLowerCase(), purpose === 'reset' ? 'reset' : 'verify');
+    return { sent: true, ...otpStatus(r) };
   });
 
   // forgot password → OTP → set a new one
@@ -229,9 +281,13 @@ async function authPluginImpl(app, { pool }) {
     if (rows[0] && !rows[0].verified) {
       // right password or not, the address isn't proven yet
       if (verifyPassword(password, rows[0].password_hash)) {
-        try { await sendOtp(email.toLowerCase(), 'verify'); } catch { /* ignore */ }
-        return reply.code(403).send({ needs_verify: true, email: email.toLowerCase(),
-          error: 'Confirm your email first — we\'ve sent you a fresh code.' });
+        let r = null;
+        try { r = await sendOtp(email.toLowerCase(), 'verify'); }
+        catch (e) { app.log.error('otp send on login: ' + e.message); }
+        return reply.code(403).send({ needs_verify: true, email: email.toLowerCase(), ...otpStatus(r),
+          error: r && r.sent
+            ? 'Confirm your email first — we\'ve sent you a fresh code.'
+            : 'Confirm your email first. We could not send the code — see the server log.' });
       }
     }
     const u = rows[0];
@@ -240,7 +296,19 @@ async function authPluginImpl(app, { pool }) {
     }
     const token = await createSession(pool, u.id);
     setCookie(reply, token);
-    return { user: { id: u.id, email: u.email, name: u.name } };
+    // A code typed at signup is applied on the first real sign-in, so the
+    // user lands inside their family instead of an empty "create one" screen.
+    let joined = null;
+    if (u.pending_join_code) {
+      try {
+        const r = await joinFamilyByCode(pool, u.pending_join_code, u.id);
+        joined = { family_id: r.family.id, family_name: r.family.name };
+      } catch (e) {
+        app.log.error('pending join: ' + e.message);
+      }
+      await pool.query('UPDATE users SET pending_join_code=NULL WHERE id=$1', [u.id]);
+    }
+    return { user: { id: u.id, email: u.email, name: u.name }, joined };
   });
 
   // ── logout ──
@@ -260,9 +328,12 @@ async function authPluginImpl(app, { pool }) {
     const { rows: parents } = await pool.query(
       `SELECT DISTINCT p.*, f.id AS family_id, f.name AS family_name,
               CASE WHEN p.user_id=$1 THEN 'dependent'
-                   WHEN cr.caregiver_user_id IS NOT NULL AND (cr.permissions->>'MANAGE_MEDICINES')::boolean THEN 'admin'
-                   WHEN cr.caregiver_user_id IS NOT NULL THEN 'member'
-                   ELSE 'member' END AS role
+                   WHEN (cr.permissions->>'MANAGE_MEDICINES')::boolean
+                     OR (cr.permissions->>'UPLOAD_REPORTS')::boolean THEN 'admin'
+                   WHEN (cr.permissions->>'RECORD_VITALS')::boolean
+                     OR (cr.permissions->>'CONFIRM_MEDICATION')::boolean
+                     OR (cr.permissions->>'MANAGE_APPOINTMENTS')::boolean THEN 'caregiver'
+                   ELSE 'viewer' END AS role
        FROM parents p
        JOIN persons_in_family pif ON pif.person_id=p.id
        JOIN families f ON f.id=pif.family_id
@@ -272,6 +343,8 @@ async function authPluginImpl(app, { pool }) {
     // families the user belongs to (for the switcher)
     const { rows: families } = await pool.query(
       `SELECT f.id, f.name, m.role,
+              (m.role IN ('OWNER','ADMIN')) AS is_admin,
+              CASE WHEN m.role IN ('OWNER','ADMIN') THEN f.invite_code ELSE NULL END AS invite_code,
               (SELECT count(*) FROM persons_in_family WHERE family_id=f.id) AS person_count,
               (SELECT count(*) FROM family_memberships WHERE family_id=f.id AND status='ACTIVE') AS member_count
        FROM families f JOIN family_memberships m ON m.family_id=f.id
