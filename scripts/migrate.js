@@ -39,12 +39,23 @@ try {
   const done = new Set(rows.map((r) => r.filename));
 
   // A database that predates this runner already has its early migrations
-  // applied by hand. Detect that from a table only the later ones create, and
-  // mark the ones we can prove ran — the rest are idempotent anyway.
+  // applied by hand — schema.sql created every table through 023 at once.
+  // Re-running them fails (e.g. 004 tries to CREATE INDEX on family_members,
+  // which is a view after 023). Backfill the ledger so only NEW files run.
   if (!done.size) {
     const { rows: [{ exists }] } = await pool.query(
       `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='families') AS exists`);
-    if (exists) console.log('  (existing database detected — every migration is idempotent, so re-running is safe)\n');
+    if (exists) {
+      console.log('  Existing database detected — marking pre-024 migrations as applied.');
+      console.log('  (schema.sql already created those tables; re-running some would fail.)\n');
+      for (const f of files) {
+        // stop at the first genuinely new file (024+) so it still runs
+        if (/^02[4-9]_|^0[3-9][0-9]_|^[1-9][0-9]{2,}_/.test(f)) break;
+        if (!DRY) await pool.query(
+          'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [f]);
+        done.add(f);
+      }
+    }
   }
 
   const pending = files.filter((f) => !done.has(f));
