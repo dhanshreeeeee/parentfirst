@@ -41,20 +41,27 @@ try {
   // A database that predates this runner already has its early migrations
   // applied by hand — schema.sql created every table through 023 at once.
   // Re-running them fails (e.g. 004 tries to CREATE INDEX on family_members,
-  // which is a view after 023). Backfill the ledger so only NEW files run.
-  if (!done.size) {
-    const { rows: [{ exists }] } = await pool.query(
-      `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='families') AS exists`);
-    if (exists) {
-      console.log('  Existing database detected — marking pre-024 migrations as applied.');
-      console.log('  (schema.sql already created those tables; re-running some would fail.)\n');
-      for (const f of files) {
-        // stop at the first genuinely new file (024+) so it still runs
-        if (/^02[4-9]_|^0[3-9][0-9]_|^[1-9][0-9]{2,}_/.test(f)) break;
-        if (!DRY) await pool.query(
-          'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [f]);
-        done.add(f);
-      }
+  // which is a view after 023). Mark them as done so only NEW files run.
+  //
+  // Gate the check on the LATE marker table 'families' existing, not on
+  // schema_migrations being empty — a previous failed run may have written
+  // a few rows before crashing, so the ledger is rarely empty on recovery.
+  const { rows: [{ exists: hasFamilies }] } = await pool.query(
+    `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name='families') AS exists`);
+  if (hasFamilies) {
+    const backfilled = [];
+    for (const f of files) {
+      // stop at the first genuinely new file (024+) so it still runs
+      if (/^02[4-9]_|^0[3-9][0-9]_|^[1-9][0-9]{2,}_/.test(f)) break;
+      if (done.has(f)) continue;
+      if (!DRY) await pool.query(
+        'INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [f]);
+      done.add(f);
+      backfilled.push(f);
+    }
+    if (backfilled.length) {
+      console.log(`  Existing database detected — ${backfilled.length} pre-024 migration(s) marked as applied.`);
+      console.log('  (schema.sql already created those tables; re-running them would fail.)\n');
     }
   }
 
