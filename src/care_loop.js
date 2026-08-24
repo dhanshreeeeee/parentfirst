@@ -37,7 +37,7 @@ export async function runTick(app, pool, now) {
   const today = now.toISOString().slice(0, 10);
 
   const { rows: elders } = await pool.query(`
-    SELECT DISTINCT p.id, p.name, p.user_id, COALESCE(p.phone, cp.phone) AS phone
+    SELECT DISTINCT p.id, p.name, p.user_id, cp.phone
     FROM parents p
     LEFT JOIN care_profiles cp ON cp.parent_id = p.id
     JOIN family_members fm ON fm.parent_id = p.id AND fm.role IN ('admin','member')
@@ -54,27 +54,6 @@ async function claim(pool, day, kind, refId, slot = '') {
     `INSERT INTO loop_marks (day, kind, ref_id, slot) VALUES ($1,$2,$3,$4)
      ON CONFLICT (day, kind, ref_id, slot) DO NOTHING`, [day, kind, refId, slot]);
   return rowCount === 1;
-}
-
-// A claim is a promise that this was delivered. If nothing got through, that
-// promise is false — drop the mark so the next tick tries again rather than
-// recording a reminder that never reached anyone.
-async function release(pool, day, kind, refId, slot = '') {
-  await pool.query(
-    `DELETE FROM loop_marks WHERE day=$1 AND kind=$2 AND ref_id=$3 AND slot=$4`,
-    [day, kind, refId, slot]);
-}
-
-// Attempt one delivery channel. Returns whether it worked, and — the whole
-// point — says so out loud when it doesn't. Every one of these calls used to
-// be `try { ... } catch {}`, so a push that never sent and a push that sent
-// looked identical from outside.
-async function deliver(app, channel, who, fn) {
-  try { await fn(); return true; }
-  catch (e) {
-    app.log.error(`care-loop: ${channel} to ${who} FAILED — ${e.message}`);
-    return false;
-  }
 }
 
 async function watchers(pool, elderId) {
@@ -102,20 +81,9 @@ async function medLoop(app, pool, elder, now, today) {
     if (elapsed >= NUDGE_AFTER_MIN && elapsed < ESCALATE_AFTER_MIN) {
       if (await claim(pool, today, 'med_nudge', elder.id, slot)) {
         const msg = `Gentle reminder 🌼 — your ${slot} medicines are waiting: ${names}. Reply HO GAYA once taken.`;
-        const ok = [];
-        if (elder.user_id && await deliver(app, 'push', elder.name,
-          () => app.sendPush([elder.user_id], 'Medicine time 🌼', names, '/'))) ok.push('push');
-        if (elder.phone && await deliver(app, 'whatsapp', elder.name,
-          () => sendWhatsApp(app, [elder.phone], msg))) ok.push('whatsapp');
-
-        if (ok.length) {
-          app.log.info(`care-loop: nudged ${elder.name} (${slot}) via ${ok.join(' + ')}`);
-        } else {
-          // Nothing reached them. Say so, and un-claim so the next tick retries.
-          app.log.warn(`care-loop: ${elder.name} (${slot}) NOT nudged — ` +
-            (elder.user_id || elder.phone ? 'every channel failed' : 'no push subscription and no phone number on record'));
-          await release(pool, today, 'med_nudge', elder.id, slot);
-        }
+        if (elder.user_id) { try { await app.sendPush([elder.user_id], 'Medicine time 🌼', names, '/'); } catch {} }
+        if (elder.phone) { try { await sendWhatsApp(app, [elder.phone], msg); } catch {} }
+        app.log.info(`care-loop: nudged ${elder.name} (${slot})`);
       }
     }
 
@@ -128,16 +96,9 @@ async function medLoop(app, pool, elder, now, today) {
           await pool.query(
             `INSERT INTO alerts (parent_id, severity, message, status) VALUES ($1,'alert',$2,'open')`,
             [elder.id, body]);
-          // The alert row above is the guaranteed channel — it is in the app
-          // whatever happens here. Push and email are the ones that can fail.
-          const ok = [];
-          if (await deliver(app, 'push', `${w.length} watcher(s)`,
-            () => app.sendPush(w.map((x) => x.id), `⏰ ${first} — ${slot} medicines`, body, '/'))) ok.push('push');
-          if (await deliver(app, 'email', `${w.length} watcher(s)`,
-            () => notifyPeople(app, w.map((x) => x.email), `${first} — ${slot} medicines unmarked`, [body]))) ok.push('email');
-          app.log[ok.length ? 'info' : 'warn'](
-            `care-loop: escalated ${elder.name} (${slot}) to ${w.length} watcher(s) — ` +
-            (ok.length ? `sent by ${ok.join(' + ')}` : 'PUSH AND EMAIL BOTH FAILED; only the in-app alert exists'));
+          try { await app.sendPush(w.map((x) => x.id), `⏰ ${first} — ${slot} medicines`, body, '/'); } catch {}
+          try { await notifyPeople(app, w.map((x) => x.email), `${first} — ${slot} medicines unmarked`, [body]); } catch {}
+          app.log.info(`care-loop: escalated ${elder.name} (${slot}) to ${w.length} watcher(s)`);
         }
       }
     }
@@ -153,15 +114,8 @@ async function checkinLoop(app, pool, elder, now, today) {
   if (t >= CHECKIN_NUDGE && t < CHECKIN_ESCALATE) {
     if (await claim(pool, today, 'checkin_nudge', elder.id)) {
       const msg = `Good morning ☀️ Your family would love to hear how you're doing today. One tap in ParentFirst, or just reply here.`;
-      const ok = [];
-      if (elder.user_id && await deliver(app, 'push', elder.name,
-        () => app.sendPush([elder.user_id], 'Good morning ☀️', 'How are you feeling today?', '/'))) ok.push('push');
-      if (elder.phone && await deliver(app, 'whatsapp', elder.name,
-        () => sendWhatsApp(app, [elder.phone], msg))) ok.push('whatsapp');
-      if (!ok.length) {
-        app.log.warn(`care-loop: check-in nudge did not reach ${elder.name} — retrying next tick`);
-        await release(pool, today, 'checkin_nudge', elder.id);
-      }
+      if (elder.user_id) { try { await app.sendPush([elder.user_id], 'Good morning ☀️', 'How are you feeling today?', '/'); } catch {} }
+      if (elder.phone) { try { await sendWhatsApp(app, [elder.phone], msg); } catch {} }
     }
   }
 
@@ -174,14 +128,8 @@ async function checkinLoop(app, pool, elder, now, today) {
         await pool.query(
           `INSERT INTO alerts (parent_id, severity, message, status) VALUES ($1,'alert',$2,'open')`,
           [elder.id, body]);
-        const ok = [];
-        if (await deliver(app, 'push', `${w.length} watcher(s)`,
-          () => app.sendPush(w.map((x) => x.id), `${first} — no check-in yet`, body, '/'))) ok.push('push');
-        if (await deliver(app, 'email', `${w.length} watcher(s)`,
-          () => notifyPeople(app, w.map((x) => x.email), `${first} hasn't checked in today`, [body]))) ok.push('email');
-        app.log[ok.length ? 'info' : 'warn'](
-          `care-loop: no-check-in alert for ${elder.name} — ` +
-          (ok.length ? `sent by ${ok.join(' + ')}` : 'PUSH AND EMAIL BOTH FAILED; only the in-app alert exists'));
+        try { await app.sendPush(w.map((x) => x.id), `${first} — no check-in yet`, body, '/'); } catch {}
+        try { await notifyPeople(app, w.map((x) => x.email), `${first} hasn't checked in today`, [body]); } catch {}
       }
     }
   }

@@ -22,11 +22,7 @@ import webpush from 'web-push';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Where uploaded files live. Local dev keeps them in ./data; a host with an
-// ephemeral filesystem (Render, Fly, Heroku) MUST point DATA_DIR at a mounted
-// disk or every report vanishes on the next deploy.
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
-const REPORTS_DIR = path.join(DATA_DIR, 'reports');
+const REPORTS_DIR = path.join(__dirname, '..', 'data', 'reports');
 // local calendar date (Postgres DATE columns are timezone-sensitive)
 const localDateStr = (d = new Date()) =>
   new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -36,11 +32,7 @@ const pool = new pg.Pool({
     process.env.DATABASE_URL ||
     `postgres://${process.env.USER || 'postgres'}@localhost:5432/parentfirst_vault`,
   // most hosted Postgres (Railway, Render, Neon, Supabase) requires SSL
-  // Hosted Postgres needs TLS. This used to require PGSSL=require to be set by
-  // hand; forgetting it produced a connection error that named nothing useful.
-  ssl: (process.env.PGSSL === 'require'
-        || /render\.com|neon\.tech|supabase|amazonaws|railway/.test(process.env.DATABASE_URL || ''))
-    ? { rejectUnauthorized: false } : undefined,
+  ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
   max: 10,
 });
 
@@ -628,7 +620,7 @@ await app.register(careRoutes, {
 
 
 // ── document vault: upload & download ───────────────────────────
-const DOCS_DIR = path.join(DATA_DIR, 'documents');
+const DOCS_DIR = path.join(__dirname, '..', 'data', 'documents');
 
 app.post('/api/parents/:parentId/documents', async (req, reply) => {
   if (!roleAtLeast(req.parentRole, 'member')) return reply.code(403).send({ error: 'member access required' });
@@ -657,6 +649,81 @@ app.get('/api/documents/:id/file', async (req, reply) => {
   reply.header('Content-Type', rows[0].file_mime || 'application/octet-stream');
   reply.header('Content-Disposition', `inline; filename="${(rows[0].file_name || 'document').replace(/"/g, '')}"`);
   return reply.send(fs.createReadStream(p));
+});
+
+// ── medicine info: what it's for + common side effects (AI, cached on the row) ──
+app.get('/api/medications/:id/info', async (req, reply) => {
+  const { rows } = await pool.query(
+    `SELECT m.*, mi.purpose, mi.side_effects, mi.cautions FROM medications m
+     LEFT JOIN medicine_info mi ON lower(mi.name)=lower(split_part(m.name,' ',-1))
+     WHERE m.id=$1`, [req.params.id]);
+  const med = rows[0];
+  if (!med) return reply.code(404).send({ error: 'medicine not found' });
+  if (med.purpose) return { name: med.name, purpose: med.purpose, side_effects: med.side_effects, cautions: med.cautions, cached: true };
+  if (!ANTHROPIC_KEY) return { name: med.name, purpose: null, side_effects: null, note: 'Add an API key for medicine explanations, or ask your pharmacist.' };
+  try {
+    const prompt = `For the medicine "${med.name}"${med.dosage?(' ('+med.dosage+')'):''}, give STRICT JSON only:
+{"generic":"active ingredient if identifiable or empty","purpose":"one plain sentence a family caregiver understands — what it is commonly prescribed for","side_effects":["3-6 common side effects, each 1-4 words"],"cautions":"one short sentence on the single most important caution, or empty"}
+This is general medicine information, NOT medical advice for a specific person. If the name is unclear or not a recognisable medicine, return {"purpose":"","side_effects":[],"cautions":""}.`;
+    const raw = await callClaude([{ type:'text', text: prompt }], 500);
+    const obj = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    if (obj.purpose) {
+      await pool.query(
+        `INSERT INTO medicine_info (name, generic, purpose, side_effects, cautions)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (name) DO UPDATE SET purpose=EXCLUDED.purpose, side_effects=EXCLUDED.side_effects, cautions=EXCLUDED.cautions`,
+        [med.name.split(' ').pop().toLowerCase(), obj.generic||null, obj.purpose, JSON.stringify(obj.side_effects||[]), obj.cautions||null]);
+    }
+    return { name: med.name, purpose: obj.purpose||null, side_effects: obj.side_effects||[], cautions: obj.cautions||null };
+  } catch (e) {
+    app.log.warn('medicine info: '+e.message);
+    return { name: med.name, purpose: null, side_effects: [], note: 'Could not fetch info right now.' };
+  }
+});
+
+// ── whole-person health summary across ALL reports + prescriptions (AI, on demand) ──
+app.get('/api/parents/:parentId/health-summary', async (req, reply) => {
+  const { rows: pr } = await pool.query('SELECT * FROM parents WHERE id=$1', [req.params.parentId]);
+  const person = pr[0];
+  if (!person) return reply.code(404).send({ error: 'person not found' });
+  const { rows: params } = await pool.query(
+    `SELECT r.report_date, rp.name, rp.value, rp.unit, rp.ref_low, rp.ref_high
+     FROM report_params rp JOIN reports r ON r.id=rp.report_id
+     WHERE r.parent_id=$1 ORDER BY r.report_date`, [req.params.parentId]);
+  const { rows: meds } = await pool.query('SELECT name, dosage FROM medications WHERE parent_id=$1 AND active=true', [req.params.parentId]);
+  const { rows: prof } = await pool.query('SELECT * FROM care_profiles WHERE parent_id=$1', [req.params.parentId]);
+  if (!params.length && !meds.length) return { ok:true, empty:true, summary:'Add a report or a prescription and a summary will appear here.' };
+  if (!ANTHROPIC_KEY) return { ok:true, summary:null, note:'A health summary needs an Anthropic API key.' };
+
+  const p = prof[0]||{};
+  const trends = {};
+  for (const r of params) (trends[r.name] ||= []).push(`${r.report_date?String(r.report_date).slice(0,10):'?'}: ${r.value}${r.unit||''}`);
+  const trendText = Object.entries(trends).map(([k,v])=>`${k}: ${v.join(' → ')}`).join('\n');
+  const prompt = `You are a careful health-literacy assistant helping a family caregiver understand their elder's health. You are NOT a doctor and must not diagnose or prescribe.
+
+Person: ${person.name}, age ${person.age||'unknown'}.
+Known conditions: ${person.conditions||'none recorded'}. Allergies: ${person.allergies||'none recorded'}.
+Lifestyle: smoking ${p.smoking||'?'}, alcohol ${p.alcohol||'?'}, diet ${p.diet||'?'}, mobility ${p.mobility||'?'}.
+Current medicines: ${meds.map(m=>m.name+(m.dosage?' '+m.dosage:'')).join(', ')||'none'}.
+Lab values over time:
+${trendText||'none'}
+
+Return STRICT JSON only:
+{
+ "summary":"3-4 plain sentences summarising overall health and what the numbers show together",
+ "watch":["2-4 specific things trending the wrong way or worth monitoring, each one short line, referencing the actual values"],
+ "lifestyle":["2-4 concrete, gentle, everyday suggestions to stay healthy, tailored to THIS person's data (diet/activity/habits)"],
+ "discuss_with_doctor":["1-3 specific questions or points to raise with their doctor at the next visit"]
+}
+RULES: Never state a diagnosis as fact — say "may be worth checking" not "you have". Every risk-type statement must point to the doctor, not to a self-treatment. Be warm and clear, not alarming. This is educational, not a medical opinion.`;
+  try {
+    const raw = await callClaude([{ type:'text', text: prompt }], 1200);
+    const obj = JSON.parse(raw.replace(/```json|```/g,'').trim());
+    return { ok:true, ...obj, generated_at:new Date().toISOString(),
+      disclaimer:'This is an AI-generated summary to help you understand the records — not a medical diagnosis. Always confirm with a doctor.' };
+  } catch (e) {
+    app.log.warn('health summary: '+e.message);
+    return reply.code(200).send({ ok:false, error:'Could not generate a summary right now.' });
+  }
 });
 
 // ── prescription scan: photo/PDF → medicines with reminders ─────
@@ -852,7 +919,7 @@ app.get('/api/messages/:id/media', async (req, reply) => {
 // ── web push (PWA notifications) ──
 // Keys persist in data/ so subscriptions survive restarts. Set VAPID_PUBLIC/
 // VAPID_PRIVATE in .env to pin them explicitly.
-const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
+const VAPID_FILE = path.join(__dirname, '..', 'data', 'vapid.json');
 let VAPID = null;
 if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
   VAPID = { publicKey: process.env.VAPID_PUBLIC, privateKey: process.env.VAPID_PRIVATE };
@@ -862,17 +929,6 @@ if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
   VAPID = webpush.generateVAPIDKeys();
   fs.mkdirSync(path.dirname(VAPID_FILE), { recursive: true });
   fs.writeFileSync(VAPID_FILE, JSON.stringify(VAPID));
-  // Fresh keys invalidate every existing subscription. On a host whose disk is
-  // wiped each deploy that happens EVERY time, silently, and reminders simply
-  // stop arriving. Refuse to start rather than fail quietly.
-  if (process.env.NODE_ENV === 'production' && !process.env.DATA_DIR) {
-    console.error('\nFATAL: generated new push keys with no persistent storage.');
-    console.error('Every existing push subscription would break on this deploy.\n');
-    console.error('Fix it one of two ways:');
-    console.error('  • set VAPID_PUBLIC and VAPID_PRIVATE (generate: npm run vapid), or');
-    console.error('  • set DATA_DIR to a mounted persistent disk\n');
-    process.exit(1);
-  }
 }
 webpush.setVapidDetails('mailto:' + (process.env.NOTIFY_FROM || 'care@parentfirst.app'),
   VAPID.publicKey, VAPID.privateKey);
