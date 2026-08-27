@@ -1021,7 +1021,8 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
        notes || null,
        Array.isArray(days_of_week) && days_of_week.length ? days_of_week : null,
        Array.isArray(times) && times.length ? times : null,
-       frequency || 'daily']);
+       frequency || 'daily',
+       ['before', 'after', 'with'].includes(food_timing) ? food_timing : null]);
     if (!rows[0]) return reply.code(404).send({ error: 'not found' });
     return rows[0];
   });

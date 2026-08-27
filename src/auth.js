@@ -66,6 +66,22 @@ async function authPluginImpl(app, { pool }) {
   app.decorateRequest('parentRole', null);
 
   // load session user for every request; enforce auth on protected /api routes
+  // Any :id in a path that reaches Postgres as a uuid must LOOK like one.
+  // Without this, a stale bookmark or mangled link returns a 500 database
+  // error instead of a clean 404 — a bad look and a needless error page.
+  app.addHook('preHandler', async (req, reply) => {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    // only params that are genuinely uuid columns — invite tokens and other
+    // opaque strings are NOT uuids and must pass through untouched
+    const UUID_PARAMS = new Set(['id', 'parentId', 'familyId', 'userId', 'personId', 'reportId', 'medId', 'memberId']);
+    for (const [key, val] of Object.entries(req.params || {})) {
+      if (!UUID_PARAMS.has(key) || typeof val !== 'string') continue;
+      if (val && !UUID_RE.test(val)) {
+        return reply.code(404).send({ error: 'not found' });
+      }
+    }
+  });
+
   app.addHook('preHandler', async (req, reply) => {
     const url = req.url.split('?')[0];
 
