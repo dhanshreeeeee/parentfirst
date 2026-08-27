@@ -28,18 +28,36 @@ export default async function familyRoutes(app, { pool }) {
     if (!member.rows[0]) return reply.code(403).send({ error: 'not a member of this family' });
     const { rows } = await pool.query(
       `SELECT p.* FROM persons p JOIN persons_in_family pif ON pif.person_id=p.id
-       WHERE pif.family_id=$1 ORDER BY p.name`, [req.params.familyId]);
+       WHERE pif.family_id=$1 AND (p.shared_with_family = true OR p.user_id = $2)
+       ORDER BY p.name`, [req.params.familyId, uid(req)]);
     return { persons: rows };
   });
 
   // ── add a person (a parent) to a family + care relationship from the creator ──
   app.post('/api/families/:familyId/persons', async (req, reply) => {
-    const { name, age, relation, city } = req.body || {};
+    const { name, age, relation, city, is_self } = req.body || {};
     if (!name) return reply.code(400).send({ error: 'name required' });
     const owner = await pool.query(
       `SELECT role FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`,
       [req.params.familyId, uid(req)]);
     if (!owner.rows[0]) return reply.code(403).send({ error: 'not a member of this family' });
+
+    // "is_self" = the caregiver's OWN health record: linked to their login,
+    // private to them, and never listed for the rest of the family.
+    if (is_self) {
+      const { rows: dupe } = await pool.query(
+        `SELECT id FROM parents WHERE user_id=$1 AND relation='self' LIMIT 1`, [uid(req)]);
+      if (dupe[0]) return reply.code(400).send({ error: 'You already have your own health record.' });
+      const { rows: [p] } = await pool.query(
+        `INSERT INTO parents (name, age, relation, city, created_by, user_id, shared_with_family)
+         VALUES ($1,$2,'self',$3,$4,$4,false) RETURNING *`,
+        [name, age || null, city || null, uid(req)]);
+      await pool.query(
+        `INSERT INTO persons_in_family (family_id, person_id) VALUES ($1,$2)
+         ON CONFLICT (family_id, person_id) DO NOTHING`, [req.params.familyId, p.id]);
+      return p;
+    }
+
     const person = await addPersonToFamily(pool, {
       familyId: req.params.familyId, name, age, relation, city,
       createdBy: uid(req), caregiverUserId: uid(req),

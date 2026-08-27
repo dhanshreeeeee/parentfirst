@@ -694,6 +694,10 @@
   .hs-k{ font-size:11px;letter-spacing:.06em;text-transform:uppercase;font-weight:700; }
   .hs-watch{ color:#b3541e; } .hs-life{ color:var(--sage); } .hs-doc{ color:var(--blue); }
   .hs-disc{ font-size:11px;color:var(--ink-faint);border-top:1px solid var(--border);padding-top:8px;margin-top:6px; }
+
+  .fam-empty{ font-size:13px;color:var(--ink-faint);margin-bottom:10px;line-height:1.5; }
+  .fam-add{ background:none;border:1px dashed var(--border);border-radius:12px;padding:9px 16px;font-size:13.5px;cursor:pointer;color:var(--ink);font-family:var(--font-body); }
+  .fam-add:hover{ border-color:var(--rust);color:var(--rust); }
 </style>
 </head>
 <body>
@@ -3411,7 +3415,19 @@ async function loadFamily(){
     + (isOwner && m.user_id!==ME.user.id ? '<button class="fam-swap" onclick="removeMember(\''+fam.id+'\',\''+m.user_id+'\',\''+esc(m.name)+'\')">Remove</button>':'')
     + '</div>';
   body.innerHTML = head
-    + '<div class="fam-sec"><h4>People we care for <span class="fam-n">'+persons.length+'</span></h4>'
+    + (function(){
+        const mine = persons.filter(p=>p.user_id===ME.user.id && p.relation==='self');
+        if(mine.length) return '<div class="fam-sec"><h4>My own health <span class="fam-n">private</span></h4>'
+          + mine.map(p=>'<div class="fam-card"><div class="fam-av">'+esc((p.name||'?')[0])+'</div>'
+            + '<div style="flex:1;"><div class="fam-name">'+esc(p.name)+' <span class="fam-you">you</span></div>'
+            + '<div class="fam-meta">'+(p.age?p.age+' · ':'')+'only you can see this vault</div></div>'
+            + '<button class="fam-swap" onclick="switchParent(\''+p.id+'\')">Open</button></div>').join('')
+          + '</div>';
+        return '<div class="fam-sec"><h4>My own health</h4>'
+          + '<div class="fam-empty">Keep your own reports, medicines and vitals here — private to you, not shared with the family.</div>'
+          + '<button class="fam-add" onclick="addMyOwnRecord()">+ Add my health record</button></div>';
+      })()
+    + '<div class="fam-sec"><h4>People we care for <span class="fam-n">'+persons.filter(p=>!(p.user_id===ME.user.id&&p.relation==='self')).length+'</span></h4>'
     + (persons.length? persons.map(pCard).join('') : '<div class="psub" style="font-size:13px;">Nobody yet — add the first person.</div>')
     + (isOwner? '<button class="btn-out" style="margin-top:0.6rem;" onclick="addPersonFlow(\''+fam.id+'\')">+ Add a person</button>':'')
     + '</div>'
@@ -3453,6 +3469,26 @@ async function deleteFamily(familyId, name){
     await j('/api/families/'+familyId,{method:'DELETE'});
     toast('Family deleted.','success');
     ACTIVE_FAMILY=null; ME=await j('/api/me'); loadFamily();
+  }catch(e){ toast(e.message,'error'); }
+}
+async function addMyOwnRecord(){
+  const fams = (await j('/api/families')).families;
+  const famId = ACTIVE_FAMILY || (fams[0] && fams[0].id);
+  if(!famId){ toast('Create your family first.','error'); return; }
+  const r = await formModal({ title:'Your own health record', submitLabel:'Create',
+    subtitle:'A private vault for your reports, medicines and vitals. Nobody else in the family can see it.',
+    fields:[
+      {id:'name', label:'Your name', placeholder:'e.g. '+esc(ME.user.name||'')},
+      {id:'age', label:'Your age', placeholder:'e.g. 32', type:'number'},
+      {id:'city', label:'City (optional)', placeholder:'e.g. Bengaluru'},
+    ]});
+  if(!r || !r.name) return;
+  try{
+    const p = await j('/api/families/'+famId+'/persons',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({name:r.name, age:r.age?+r.age:null, city:r.city||null, is_self:true})});
+    toast('Your private health vault is ready.','success');
+    ME = await j('/api/me');
+    loadFamily();
   }catch(e){ toast(e.message,'error'); }
 }
 function copyInviteLink(token){

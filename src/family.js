@@ -177,7 +177,9 @@ export async function accessToPerson(pool, userId, personId) {
   const { rows: [fm] } = await pool.query(
     `SELECT 1 FROM family_memberships fm
      JOIN persons_in_family pif ON pif.family_id = fm.family_id
-     WHERE fm.user_id=$1 AND pif.person_id=$2 AND fm.status='ACTIVE' LIMIT 1`, [userId, personId]);
+     JOIN parents p ON p.id = pif.person_id
+     WHERE fm.user_id=$1 AND pif.person_id=$2 AND fm.status='ACTIVE'
+       AND p.shared_with_family = true LIMIT 1`, [userId, personId]);
   if (fm) return { self: false, permissions: { VIEW_REPORTS: true, VIEW_VITALS: true, VIEW_MEDICINES: true } };
   return null;
 }
@@ -194,6 +196,7 @@ export async function personsForUser(pool, userId) {
      JOIN persons_in_family pif ON pif.person_id = p.id
      JOIN families f ON f.id = pif.family_id
      JOIN family_memberships fm ON fm.family_id = f.id AND fm.user_id = $1 AND fm.status='ACTIVE'
+     WHERE (p.shared_with_family = true OR p.user_id = $1)
      ORDER BY p.name`, [userId]);
   return rows;
 }

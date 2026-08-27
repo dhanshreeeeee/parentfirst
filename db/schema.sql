@@ -534,6 +534,9 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS verified BOOLEAN NOT NULL DEFAULT tru
 ALTER TABLE users ADD COLUMN IF NOT EXISTS signup_role TEXT;
 ALTER TABLE parents ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id) ON DELETE SET NULL;
 ALTER TABLE parents ADD COLUMN IF NOT EXISTS created_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS shared_with_family BOOLEAN NOT NULL DEFAULT true;
+-- a caregiver's OWN health record is private: visible to them, never to the
+-- rest of the family. People being cared for stay shared (the default).
 CREATE OR REPLACE VIEW persons AS SELECT * FROM parents;  -- refresh columns after ALTERs
 
 

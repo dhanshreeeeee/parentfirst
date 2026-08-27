@@ -284,6 +284,7 @@ async function authPluginImpl(app, { pool }) {
        JOIN families f ON f.id=pif.family_id
        JOIN family_memberships fm ON fm.family_id=f.id AND fm.user_id=$1 AND fm.status='ACTIVE'
        LEFT JOIN care_relationships cr ON cr.person_id=p.id AND cr.caregiver_user_id=$1
+       WHERE (p.shared_with_family = true OR p.user_id = $1)
        ORDER BY p.created_at`, [req.user.id]);
     // families the user belongs to (for the switcher)
     const { rows: families } = await pool.query(
