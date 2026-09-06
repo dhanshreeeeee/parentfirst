@@ -8,6 +8,9 @@ import { accessToPerson } from './family.js';
 
 const COOKIE = 'pf_session';
 const SESSION_DAYS = 30;
+// An elder signs in once on their own phone and should never be asked again.
+// A carer's session is shorter because they use shared/work devices.
+const ELDER_SESSION_DAYS = 180;
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -24,9 +27,14 @@ export function verifyPassword(password, stored) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+async function sessionDaysFor(pool, userId) {
+  const { rows } = await pool.query('SELECT signup_role FROM users WHERE id=$1', [userId]);
+  return rows[0]?.signup_role === 'parent' ? ELDER_SESSION_DAYS : SESSION_DAYS;
+}
 async function createSession(pool, userId) {
   const token = crypto.randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + SESSION_DAYS * 864e5);
+  const days = await sessionDaysFor(pool, userId);
+  const expires = new Date(Date.now() + days * 864e5);
   await pool.query(
     'INSERT INTO sessions (token, user_id, expires_at) VALUES ($1,$2,$3)',
     [token, userId, expires]);
@@ -255,7 +263,7 @@ async function authPluginImpl(app, { pool }) {
       return reply.code(401).send({ error: 'invalid email or password' });
     }
     const token = await createSession(pool, u.id);
-    setCookie(reply, token);
+    setCookie(reply, token, u.signup_role === 'parent' ? ELDER_SESSION_DAYS : SESSION_DAYS);
     return { user: { id: u.id, email: u.email, name: u.name } };
   });
 
@@ -320,11 +328,11 @@ async function authPluginImpl(app, { pool }) {
     return { ok: true };
   });
 
-  function setCookie(reply, token) {
+  function setCookie(reply, token, days) {
     reply.setCookie(COOKIE, token, {
       path: '/', httpOnly: true, sameSite: 'lax',
       secure: process.env.NODE_ENV === 'production' && !process.env.ALLOW_INSECURE_COOKIE,
-      maxAge: SESSION_DAYS * 86400,
+      maxAge: (days || SESSION_DAYS) * 86400,
     });
   }
 }

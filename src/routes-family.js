@@ -296,4 +296,48 @@ export default async function familyRoutes(app, { pool }) {
       return { joined: true, family_id: fam.id, family_name: fam.name };
     }catch(e){ return reply.code(e.statusCode||400).send({ error: e.message }); }
   });
+
+  // ═══════════ FAMILY TO-DOS — "who's doing what" for siblings ═══════════
+  const memberOf = async (familyId, userId) => (await pool.query(
+    `SELECT 1 FROM family_memberships WHERE family_id=$1 AND user_id=$2 AND status='ACTIVE'`, [familyId, userId])).rows[0];
+
+  app.get('/api/families/:familyId/todos', async (req, reply) => {
+    if (!await memberOf(req.params.familyId, uid(req))) return reply.code(403).send({ error: 'not a member' });
+    const { rows } = await pool.query(
+      `SELECT t.*, a.name AS assigned_name, c.name AS created_name, d.name AS done_name, p.name AS person_name
+       FROM family_todos t
+       LEFT JOIN users a ON a.id=t.assigned_to LEFT JOIN users c ON c.id=t.created_by
+       LEFT JOIN users d ON d.id=t.done_by LEFT JOIN parents p ON p.id=t.person_id
+       WHERE t.family_id=$1 AND (t.done_at IS NULL OR t.done_at > now() - interval '7 days')
+       ORDER BY t.done_at NULLS FIRST, t.due_date NULLS LAST, t.created_at`, [req.params.familyId]);
+    return { todos: rows };
+  });
+  app.post('/api/families/:familyId/todos', async (req, reply) => {
+    if (!await memberOf(req.params.familyId, uid(req))) return reply.code(403).send({ error: 'not a member' });
+    const { title, assigned_to, due_date, person_id } = req.body || {};
+    if (!title || !title.trim()) return reply.code(400).send({ error: 'what needs doing?' });
+    const { rows: [t] } = await pool.query(
+      `INSERT INTO family_todos (family_id, person_id, title, assigned_to, due_date, created_by)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [req.params.familyId, person_id || null, title.trim(), assigned_to || null, due_date || null, uid(req)]);
+    return t;
+  });
+  app.patch('/api/families/:familyId/todos/:id', async (req, reply) => {
+    if (!await memberOf(req.params.familyId, uid(req))) return reply.code(403).send({ error: 'not a member' });
+    const { done, assigned_to, title, due_date } = req.body || {};
+    const { rows: [t] } = await pool.query(
+      `UPDATE family_todos SET
+         done_at = CASE WHEN $3::boolean IS NULL THEN done_at WHEN $3 THEN now() ELSE NULL END,
+         done_by = CASE WHEN $3::boolean IS NULL THEN done_by WHEN $3 THEN $4 ELSE NULL END,
+         assigned_to = COALESCE($5, assigned_to), title = COALESCE($6, title), due_date = COALESCE($7, due_date)
+       WHERE id=$1 AND family_id=$2 RETURNING *`,
+      [req.params.id, req.params.familyId, done === undefined ? null : !!done, uid(req), assigned_to || null, title || null, due_date || null]);
+    if (!t) return reply.code(404).send({ error: 'not found' });
+    return t;
+  });
+  app.delete('/api/families/:familyId/todos/:id', async (req, reply) => {
+    if (!await memberOf(req.params.familyId, uid(req))) return reply.code(403).send({ error: 'not a member' });
+    await pool.query(`DELETE FROM family_todos WHERE id=$1 AND family_id=$2`, [req.params.id, req.params.familyId]);
+    return { deleted: true };
+  });
 }

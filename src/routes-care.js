@@ -2,6 +2,15 @@ import { notifyOperator, notifyPeople } from './notify.js';
 // Care modules: medications, caregiver daily logs (+ family update), emergency card.
 // Registered as a Fastify plugin from server.js.
 
+
+// refill maths: doses per day from the slots, days left from the stock
+function withRefill(m) {
+  const perDay = (m.slot_morning?1:0) + (m.slot_afternoon?1:0) + (m.slot_night?1:0) || 1;
+  const daysLeft = (m.stock_count == null) ? null : Math.floor(m.stock_count / perDay);
+  return { ...m, doses_per_day: perDay, days_left: daysLeft,
+           refill_status: daysLeft == null ? 'unknown' : daysLeft <= 0 ? 'out' : daysLeft <= 5 ? 'low' : 'ok' };
+}
+
 export default async function careRoutes(app, { pool, callClaude, hasKey, roleAtLeast }) {
   const SLOTS = ['morning', 'afternoon', 'night'];
   // Dates: Postgres DATE columns come back as LOCAL midnight, so converting with
@@ -120,7 +129,7 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
       'SELECT * FROM medications WHERE parent_id=$1 AND active=true ORDER BY created_at',
       [req.params.parentId],
     );
-    return rows;
+    return rows.map(withRefill);
   });
 
   app.post('/api/parents/:parentId/medications', async (req, reply) => {
@@ -207,16 +216,26 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
     if (!SLOTS.includes(slot)) return reply.code(400).send({ error: 'slot must be morning|afternoon|night' });
     const logDate = date || localDate();
     if (taken === false) {
-      await pool.query('DELETE FROM medication_log WHERE medication_id=$1 AND log_date=$2 AND slot=$3',
+      // un-taking a dose that was logged gives the tablet back
+      const { rowCount } = await pool.query(
+        'DELETE FROM medication_log WHERE medication_id=$1 AND log_date=$2 AND slot=$3',
         [req.params.id, logDate, slot]);
+      if (rowCount > 0) await pool.query(
+        `UPDATE medications SET stock_count=stock_count+1 WHERE id=$1 AND stock_count IS NOT NULL`, [req.params.id]);
       return { taken: false };
     }
-    await pool.query(
+    // only a NEW log row consumes a tablet — re-tapping the same slot must not double-count
+    const { rowCount: inserted } = await pool.query(
       `INSERT INTO medication_log (medication_id, log_date, slot, taken)
        VALUES ($1,$2,$3,true)
-       ON CONFLICT (medication_id, log_date, slot) DO UPDATE SET taken=true, taken_at=now()`,
+       ON CONFLICT (medication_id, log_date, slot) DO NOTHING`,
       [req.params.id, logDate, slot],
     );
+    if (inserted > 0) await pool.query(
+      `UPDATE medications SET stock_count=GREATEST(stock_count-1,0) WHERE id=$1 AND stock_count IS NOT NULL`, [req.params.id]);
+    else await pool.query(
+      `UPDATE medication_log SET taken=true, taken_at=now() WHERE medication_id=$1 AND log_date=$2 AND slot=$3`,
+      [req.params.id, logDate, slot]);
     return { taken: true };
   });
 
@@ -432,6 +451,8 @@ Caregiver note: ${notes || '-'}`;
       `SELECT a.message, a.created_at, u.name AS by_name FROM alerts a
        LEFT JOIN users u ON u.id=a.created_by
        WHERE a.parent_id=$1 AND a.status='open' ORDER BY a.created_at DESC`, [pid]);
+
+
     const { rows: nextAppt } = await pool.query(
       `SELECT title, with_whom, appt_date, appt_time, kind FROM appointments
        WHERE parent_id=$1 AND status='upcoming' AND appt_date >= CURRENT_DATE
@@ -440,6 +461,34 @@ Caregiver note: ${notes || '-'}`;
       `SELECT count(*)::int AS c FROM appointments
        WHERE parent_id=$1 AND status='upcoming' AND appt_date < CURRENT_DATE`, [pid]);
 
+    // ── the 5-second answer: is everything OK today, and if not, what needs me? ──
+    const { rows: lowMeds } = await pool.query(
+      `SELECT name, stock_count, ((slot_morning::int)+(slot_afternoon::int)+(slot_night::int)) AS per_day
+       FROM medications WHERE parent_id=$1 AND active=true AND stock_count IS NOT NULL`, [pid]);
+    const { rows: chk } = await pool.query(
+      `SELECT feeling FROM checkins WHERE parent_id=$1 AND created_at::date = (now() AT TIME ZONE 'Asia/Kolkata')::date
+       ORDER BY created_at DESC LIMIT 1`, [pid]);
+    const items = [];
+    const sos = openAlerts.filter(a => /sos|emergency/i.test(a.message||''));
+    if (sos.length) items.push({ level:'urgent', text:'SOS raised — ' + (sos[0].message||'').slice(0,60) });
+    if (chk[0] && /help|not well|unwell|bad/i.test(chk[0].feeling||'')) items.push({ level:'urgent', text:'Said they are not well today' });
+    const missed = overdue[0].c;
+    if (missed > 0) items.push({ level:'warn', text: missed + ' medicine dose' + (missed>1?'s':'') + ' overdue' });
+    for (const m of lowMeds) {
+      const days = Math.floor(m.stock_count / (m.per_day || 1));
+      if (days <= 0) items.push({ level:'urgent', text: m.name + ' has run out' });
+      else if (days <= 5) items.push({ level:'warn', text: m.name + ' running low — ' + days + ' day' + (days===1?'':'s') + ' left' });
+    }
+    const otherAlerts = openAlerts.length - sos.length;
+    if (otherAlerts > 0) items.push({ level:'warn', text: otherAlerts + ' open alert' + (otherAlerts>1?'s':'') });
+    if (!chk[0]) items.push({ level:'info', text:'No check-in yet today' });
+    const urgent = items.filter(i=>i.level==='urgent').length, warn = items.filter(i=>i.level==='warn').length;
+    const headline = {
+      state: urgent ? 'urgent' : warn ? 'attention' : 'ok',
+      title: urgent ? 'Needs you now' : warn ? (warn + ' thing' + (warn>1?'s':'') + ' need attention') : 'All well today',
+      items,
+      checked_in: !!chk[0], feeling: chk[0]?.feeling || null,
+    };
     return {
       today: dl[0] || null,
       medication: { due, done, adherence: due ? Math.round((done / due) * 100) : 100 },
@@ -451,6 +500,7 @@ Caregiver note: ${notes || '-'}`;
       alerts: openAlerts,
       next_appointment: nextAppt[0] || null,
       overdue_count: overdue[0].c,
+      headline,
     };
   });
 
@@ -1025,6 +1075,18 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
        ['before', 'after', 'with'].includes(food_timing) ? food_timing : null]);
     if (!rows[0]) return reply.code(404).send({ error: 'not found' });
     return rows[0];
+  });
+
+  // ── refill tracking: how many tablets are in hand ──
+  app.put('/api/medications/:id/stock', async (req, reply) => {
+    const role = await medRole(req);
+    if (!role) return reply.code(403).send({ error: 'no access' });
+    const n = parseInt((req.body||{}).stock_count, 10);
+    if (Number.isNaN(n) || n < 0) return reply.code(400).send({ error: 'how many tablets are left?' });
+    const { rows: [m] } = await pool.query(
+      `UPDATE medications SET stock_count=$2, stock_updated_at=now() WHERE id=$1 RETURNING *`, [req.params.id, n]);
+    if (!m) return reply.code(404).send({ error: 'not found' });
+    return withRefill(m);
   });
 
   // ═══════════════════ FOOD & WELLNESS ═══════════════════

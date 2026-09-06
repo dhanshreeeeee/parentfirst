@@ -698,6 +698,39 @@
   .fam-empty{ font-size:13px;color:var(--ink-faint);margin-bottom:10px;line-height:1.5; }
   .fam-add{ background:none;border:1px dashed var(--border);border-radius:12px;padding:9px 16px;font-size:13.5px;cursor:pointer;color:var(--ink);font-family:var(--font-body); }
   .fam-add:hover{ border-color:var(--rust);color:var(--rust); }
+
+  /* today headline */
+  .hl{ border-radius:var(--r-lg); padding:1rem 1.2rem; margin-bottom:1.1rem; border:1px solid var(--border); }
+  .hl-ok{ background:var(--sage-light); border-color:var(--sage); } .hl-attention{ background:var(--gold-light); border-color:#d9b24a; } .hl-urgent{ background:#fbe6e3; border-color:var(--red); }
+  .hl-title{ font-family:var(--font-display); font-size:22px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .hl-ic{ font-size:20px; } .hl-feel{ font-family:var(--font-body); font-size:13px; color:var(--ink-faint); margin-left:auto; }
+  .hl-items{ margin:8px 0 0; padding-left:0; list-style:none; } .hl-items li{ font-size:14px; padding:3px 0; }
+  .hl-items li.hl-urgent{ color:var(--red); font-weight:600; } .hl-items li.hl-warn{ color:#8a5a00; } .hl-items li.hl-info{ color:var(--ink-faint); }
+  /* to-dos */
+  .todo-panel{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:1rem 1.2rem; margin-top:1.2rem; }
+  .todo-head{ display:flex; justify-content:space-between; align-items:center; font-weight:600; margin-bottom:8px; }
+  .todo{ display:flex; align-items:center; gap:12px; padding:9px 0; border-top:1px solid var(--border); }
+  .todo.done .todo-title{ text-decoration:line-through; color:var(--ink-faint); }
+  .todo-chk{ width:26px; height:26px; border-radius:50%; border:2px solid var(--sage); background:var(--white); cursor:pointer; color:var(--sage); font-size:14px; flex-shrink:0; }
+  .todo.done .todo-chk{ background:var(--sage); color:#fff; }
+  .todo-body{ flex:1; } .todo-title{ font-size:14.5px; } .todo-meta{ font-size:12px; color:var(--ink-faint); margin-top:2px; }
+  .todo-x{ border:none; background:none; color:var(--ink-faint); font-size:20px; cursor:pointer; } .todo-x:hover{ color:var(--red); }
+  .todo-empty{ font-size:13px; color:var(--ink-faint); padding:8px 0; } .todo-done summary{ font-size:12px; color:var(--ink-faint); cursor:pointer; margin-top:8px; }
+  /* refills */
+  .med-stock{ border:1px solid var(--border); background:var(--white); border-radius:8px; padding:4px 10px; font-size:12px; cursor:pointer; font-family:var(--font-body); }
+  .med-stock.low{ background:var(--gold-light); border-color:#d9b24a; color:#8a5a00; font-weight:600; }
+  .med-stock.out{ background:#fbe6e3; border-color:var(--red); color:var(--red); font-weight:600; }
+  .med-stock.ok{ color:var(--sage); } .med-stock.unknown{ color:var(--ink-faint); }
+  /* big text mode — the elder's eyes */
+  .bigtext-btn{ border:1px solid var(--border); background:var(--white); border-radius:20px; padding:5px 12px; font-size:12px; cursor:pointer; margin-right:8px; font-family:var(--font-body); }
+  body.big-text{ font-size:19px; }
+  body.big-text .psub, body.big-text .med-sub, body.big-text .fam-meta, body.big-text .todo-meta{ font-size:17px; }
+  body.big-text button, body.big-text .btn-primary, body.big-text .btn-out, body.big-text .dchip, body.big-text .side-btn{ font-size:18px; padding-top:14px; padding-bottom:14px; }
+  body.big-text .pt, body.big-text h1{ font-size:38px; } body.big-text h2{ font-size:28px; }
+  body.big-text .chat-input, body.big-text input, body.big-text textarea{ font-size:19px; padding:14px; }
+  body.big-text .me-feel button, body.big-text .feel-btn{ font-size:22px; min-height:64px; }
+
+  .med-actions{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-end; }
 </style>
 </head>
 <body>
@@ -713,6 +746,7 @@
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
       <div class="pick-menu" id="parentMenu"></div>
     </div>
+    <button id="bigTextBtn" class="bigtext-btn" onclick="toggleBigText()" title="Text size">A+ Bigger text</button>
     <span class="ai-pill" id="aiPill">AI: checking...</span>
     <div class="user-btn" id="userBtn" onclick="toggleUserMenu(event)">
       <span class="user-av" id="userAv">-</span>
@@ -806,7 +840,9 @@
       <div style="float:right;"><button class="btn-out" onclick="doctorSummary()">🖨 Doctor summary</button></div>
       <h1 class="pt" id="monTitle">How is <em>everyone?</em></h1>
       <p class="psub">Everything at a glance — today's mood, medicines, vitals, and care team. Your morning-chai check-in.</p>
+      <div id="todayHeadline"></div>
       <div id="monitorBody"></div>
+      <div id="familyTodos"></div>
     </div>
 
     <div class="view" id="view-vault">
@@ -1936,6 +1972,11 @@ async function applyProfileAdaptations(){
 const DEPENDENT_VIEWS = ['me','messages','community','emergency'];
 function applyDependentMode(){
   document.body.classList.toggle('dependent-mode', !!IS_DEPENDENT);
+  // elders get big text by default; anyone can toggle it (remembered on this device)
+  const pref = localStorage.getItem('pf_bigtext');
+  const big = pref==null ? !!IS_DEPENDENT : pref==='1';
+  document.body.classList.toggle('big-text', big);
+  const tb=document.getElementById('bigTextBtn'); if(tb) tb.textContent = big ? 'A− Normal text' : 'A+ Bigger text';
   // show/hide each nav item (JS is the single source of truth)
   document.querySelectorAll('.side-btn[data-v]').forEach(btn=>{
     const v = btn.dataset.v;
@@ -2228,8 +2269,26 @@ async function loadMeds(){
     const DAYN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
     const timeStr = (m.times&&m.times.length)?'<span class="slot-badge">⏰ '+m.times.join(', ')+'</span>':'';
     const dayStr = (m.days_of_week&&m.days_of_week.length&&m.days_of_week.length<7)?'<span class="slot-badge">'+m.days_of_week.map(d=>DAYN[d]).join(', ')+'</span>':'';
-    return '<div class="med-row"><div><span class="med-name">'+esc(m.name)+'</span> <span class="med-sub">'+esc(m.dosage||'')+'</span>'+(FOOD_LABEL[m.food_timing]?' <span class=\"med-food\">'+FOOD_LABEL[m.food_timing]+'</span>':'')+' '+slots+timeStr+dayStr+(m.notes?' <span class="med-sub">· '+esc(m.notes)+'</span>':'')+'</div><button class="med-edit" data-req="meds" onclick="editMed(\''+m.id+'\')">Edit</button> <button class="med-del" data-req="meds" onclick="delMed(\''+m.id+'\')">Remove</button></div>';
+    return '<div class="med-row"><div><span class="med-name">'+esc(m.name)+'</span> <span class="med-sub">'+esc(m.dosage||'')+'</span>'+(FOOD_LABEL[m.food_timing]?' <span class=\"med-food\">'+FOOD_LABEL[m.food_timing]+'</span>':'')+' '+slots+timeStr+dayStr+(m.notes?' <span class="med-sub">· '+esc(m.notes)+'</span>':'')+'</div><div class="med-actions">'
+      + (function(){ const r=m.refill_status; const lbl = r==='out'?'Out of stock':r==='low'?(m.days_left+' day'+(m.days_left===1?'':'s')+' left'):r==='ok'?(m.days_left+' days left'):'Set stock';
+          return '<button class="med-stock '+(r||'unknown')+'" data-req="meds" onclick="setStock(\''+m.id+'\',\''+esc(m.name)+'\','+(m.stock_count==null?'null':m.stock_count)+')">'+lbl+'</button> '; })()
+      + '<button class="med-info" onclick="showMedInfo(\''+m.id+'\',\''+esc(m.name)+'\')">What is this for?</button> '
+      + '<button class="med-edit" data-req="meds" onclick="editMed(\''+m.id+'\')">Edit</button> <button class="med-del" data-req="meds" onclick="delMed(\''+m.id+'\')">Remove</button></div></div>';
   }).join('') || '';
+}
+function toggleBigText(){
+  const now=!document.body.classList.contains('big-text');
+  localStorage.setItem('pf_bigtext', now?'1':'0');
+  document.body.classList.toggle('big-text', now);
+  const tb=document.getElementById('bigTextBtn'); if(tb) tb.textContent = now ? 'A− Normal text' : 'A+ Bigger text';
+}
+async function setStock(id, name, current){
+  const r=await formModal({ title:'How many '+name+' are left?', submitLabel:'Save',
+    subtitle:'Count the tablets in hand. Each dose marked taken counts one down, and you\'ll see "running low" here and on Today.',
+    fields:[{id:'n', label:'Tablets in hand', type:'number', placeholder:'e.g. 30', value: current==null?'':String(current)}]});
+  if(!r || r.n==='' || r.n==null) return;
+  try{ await j('/api/medications/'+id+'/stock',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({stock_count:+r.n})});
+       toast('Stock updated.','success'); loadMeds(); }catch(e){ toast(e.message,'error'); }
 }
 async function showMedInfo(id, name){
   const bg=document.createElement('div'); bg.className='modal-bg open'; bg.id='medInfoModal';
@@ -2452,10 +2511,63 @@ document.addEventListener('click', function(e){
 });
 
 // ═══════════ PARENT MONITOR ═══════════
+function renderHeadline(h){
+  const host=document.getElementById('todayHeadline'); if(!host||!h) return;
+  const icon = h.state==='ok'?'&#10003;':h.state==='urgent'?'&#9888;':'&#8226;';
+  host.innerHTML = '<div class="hl hl-'+h.state+'"><div class="hl-title"><span class="hl-ic">'+icon+'</span>'+esc(h.title)
+    + (h.checked_in && h.feeling ? '<span class="hl-feel">Checked in: '+esc(h.feeling)+'</span>':'')+'</div>'
+    + (h.items.length ? '<ul class="hl-items">'+h.items.map(i=>'<li class="hl-'+i.level+'">'+esc(i.text)+'</li>').join('')+'</ul>' : '')
+    + '</div>';
+}
+async function loadFamilyTodos(){
+  const host=document.getElementById('familyTodos'); if(!host) return;
+  let fams=[]; try{ fams=(await j('/api/families')).families; }catch(e){}
+  const famId = ACTIVE_FAMILY || (PARENT&&PARENT.family_id) || (fams[0]&&fams[0].id);
+  if(!famId){ host.innerHTML=''; return; }
+  let todos=[], members=[];
+  try{ todos=(await j('/api/families/'+famId+'/todos')).todos; }catch(e){}
+  try{ members=(await j('/api/families/'+famId+'/members')).members; }catch(e){}
+  const open=todos.filter(t=>!t.done_at), done=todos.filter(t=>t.done_at);
+  const row=t=>'<div class="todo'+(t.done_at?' done':'')+'">'
+    + '<button class="todo-chk" onclick="toggleTodo(\''+famId+'\',\''+t.id+'\','+(t.done_at?'false':'true')+')" title="'+(t.done_at?'Reopen':'Mark done')+'">'+(t.done_at?'&#10003;':'')+'</button>'
+    + '<div class="todo-body"><div class="todo-title">'+esc(t.title)+'</div>'
+    + '<div class="todo-meta">'+(t.assigned_name?esc(t.assigned_name):'<span style="color:var(--rust);">unassigned</span>')
+    + (t.due_date?' · due '+esc(String(t.due_date).slice(0,10)):'')+(t.done_at?' · done by '+esc(t.done_name||''):'')+'</div></div>'
+    + '<button class="todo-x" onclick="delTodo(\''+famId+'\',\''+t.id+'\')" title="Remove">&times;</button></div>';
+  host.innerHTML = '<div class="todo-panel"><div class="todo-head"><span>Family to-dos <span class="fam-n">'+open.length+'</span></span>'
+    + '<button class="btn-out" onclick="addTodo(\''+famId+'\')">+ Add</button></div>'
+    + (open.length ? open.map(row).join('') : '<div class="todo-empty">Nothing pending. Add "book cardiologist" or "buy Metformin" so everyone knows who\'s on it.</div>')
+    + (done.length ? '<details class="todo-done"><summary>Done recently ('+done.length+')</summary>'+done.map(row).join('')+'</details>' : '')
+    + '</div>';
+  window._famMembers = members;
+}
+async function addTodo(famId){
+  const members=window._famMembers||[];
+  const r=await formModal({ title:'Add a family to-do', submitLabel:'Add',
+    fields:[
+      {id:'title', label:'What needs doing?', placeholder:'e.g. Book cardiologist follow-up'},
+      {id:'assigned_to', label:'Who\'s on it?', options:[{value:'',label:'Anyone',selected:true}].concat(members.map(m=>({value:m.user_id,label:m.name})))},
+      {id:'due_date', label:'By when (optional)', type:'date'},
+    ]});
+  if(!r||!r.title) return;
+  try{ await j('/api/families/'+famId+'/todos',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({title:r.title, assigned_to:r.assigned_to||null, due_date:r.due_date||null, person_id:PARENT&&PARENT.id})});
+       loadFamilyTodos(); }catch(e){ toast(e.message,'error'); }
+}
+async function toggleTodo(famId,id,done){
+  try{ await j('/api/families/'+famId+'/todos/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({done})}); loadFamilyTodos(); }
+  catch(e){ toast(e.message,'error'); }
+}
+async function delTodo(famId,id){
+  if(!confirm('Remove this to-do?')) return;
+  try{ await j('/api/families/'+famId+'/todos/'+id,{method:'DELETE'}); loadFamilyTodos(); }catch(e){ toast(e.message,'error'); }
+}
 async function loadMonitor(){
   let m;
   try{ m = await j('/api/parents/'+PARENT.id+'/monitor'); }
   catch(e){ document.getElementById('monitorBody').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
+  renderHeadline(m.headline);
+  loadFamilyTodos();
   const upd = m.today && m.today.family_update ? m.today.family_update : 'No update logged yet today. The caregiver can add one in Daily Care.';
   const mood = m.today && m.today.mood ? m.today.mood : null;
   const vitalCards = m.key_vitals.map(v=>{
