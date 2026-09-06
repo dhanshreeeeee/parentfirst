@@ -239,6 +239,33 @@ export default async function careRoutes(app, { pool, callClaude, hasKey, roleAt
     return { taken: true };
   });
 
+  // Last 7 days of adherence — powers the sparkline on Today
+  app.get('/api/parents/:parentId/medications/adherence', async (req) => {
+    const pid = req.params.parentId;
+    const { rows: meds } = await pool.query(
+      `SELECT id, slot_morning, slot_afternoon, slot_night, created_at::date AS since FROM medications WHERE parent_id=$1 AND active=true`, [pid]);
+    const { rows: logs } = await pool.query(
+      `SELECT medication_id, log_date, slot FROM medication_log
+       WHERE medication_id IN (SELECT id FROM medications WHERE parent_id=$1) AND taken=true
+         AND log_date >= $2::date - 6`, [pid, localDate()]);
+    const iso = v => localDate(new Date(v));
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = localDate(d);
+      let due = 0, done = 0;
+      for (const m of meds) {
+        if (iso(m.since) > key) continue;
+        for (const sl of ['morning','afternoon','night']) if (m['slot_'+sl]) {
+          due++; if (logs.some(l => l.medication_id===m.id && iso(l.log_date)===key && l.slot===sl)) done++;
+        }
+      }
+      days.push({ date: key, due, done, pct: due ? Math.round(done/due*100) : null });
+    }
+    const scored = days.filter(d=>d.pct!=null);
+    return { days, avg: scored.length ? Math.round(scored.reduce((a,d)=>a+d.pct,0)/scored.length) : null };
+  });
+
   // Today's schedule grouped by slot, with taken status + adherence %
   app.get('/api/parents/:parentId/medications/today', async (req) => {
     const date = req.query.date || localDate();
@@ -466,8 +493,12 @@ Caregiver note: ${notes || '-'}`;
       `SELECT name, stock_count, ((slot_morning::int)+(slot_afternoon::int)+(slot_night::int)) AS per_day
        FROM medications WHERE parent_id=$1 AND active=true AND stock_count IS NOT NULL`, [pid]);
     const { rows: chk } = await pool.query(
-      `SELECT feeling FROM checkins WHERE parent_id=$1 AND created_at::date = (now() AT TIME ZONE 'Asia/Kolkata')::date
-       ORDER BY created_at DESC LIMIT 1`, [pid]);
+      `SELECT id, feeling FROM checkins WHERE parent_id=$1 AND checkin_date = $2
+       ORDER BY created_at DESC LIMIT 1`, [pid, localDate()]);
+    // a carer looking at Today = "your family saw this" for the elder
+    if (chk[0] && req.user && req.user.id && !(await pool.query('SELECT 1 FROM parents WHERE id=$1 AND user_id=$2',[pid, req.user.id])).rows[0]) {
+      await pool.query(`INSERT INTO checkin_views (checkin_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [chk[0].id, req.user.id]);
+    }
     const items = [];
     const sos = openAlerts.filter(a => /sos|emergency/i.test(a.message||''));
     if (sos.length) items.push({ level:'urgent', text:'SOS raised — ' + (sos[0].message||'').slice(0,60) });
@@ -959,8 +990,20 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
   app.get('/api/parents/:parentId/checkins', async (req) => {
     const { rows } = await pool.query(
       'SELECT * FROM checkins WHERE parent_id=$1 ORDER BY checkin_date DESC LIMIT 30', [req.params.parentId]);
+    let seen_by = [];
+    if (rows[0] && rows[0].checkin_date && localDate(new Date(rows[0].checkin_date))===localDate()) {
+      seen_by = (await pool.query(
+        `SELECT u.name, v.seen_at FROM checkin_views v JOIN users u ON u.id=v.user_id
+         WHERE v.checkin_id=$1 ORDER BY v.seen_at`, [rows[0].id])).rows;
+    }
+    const { rows: nextAp } = await pool.query(
+      `SELECT a.title, a.with_whom, a.appt_date, a.appt_time, a.location, u.name AS accompany_name
+       FROM appointments a LEFT JOIN users u ON u.id=a.accompany_user_id
+       WHERE a.parent_id=$1 AND a.appt_date >= (now() AT TIME ZONE 'Asia/Kolkata')::date
+       ORDER BY a.appt_date, a.appt_time NULLS LAST LIMIT 1`, [req.params.parentId]);
+
     const today = localDate();
-    return { checkins: rows, today: rows.find((r) => localDate(r.checkin_date) === today) || null };
+    return { seen_by, next_appointment: nextAp[0] || null, checkins: rows, today: rows.find((r) => localDate(r.checkin_date) === today) || null };
   });
 
   app.post('/api/parents/:parentId/checkins', async (req, reply) => {
@@ -1457,19 +1500,19 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
   // ────────────────────────── APPOINTMENTS & REMINDERS ──────────────────────────
   app.get('/api/parents/:parentId/appointments', async (req) => {
     const { rows } = await pool.query(
-      `SELECT * FROM appointments WHERE parent_id=$1
-       ORDER BY (status='upcoming') DESC, appt_date ASC`, [req.params.parentId]);
+      `SELECT a.*, u.name AS accompany_name FROM appointments a LEFT JOIN users u ON u.id=a.accompany_user_id
+       WHERE a.parent_id=$1 ORDER BY (a.status='upcoming') DESC, a.appt_date ASC`, [req.params.parentId]);
     return rows;
   });
   app.post('/api/parents/:parentId/appointments', async (req, reply) => {
     if (!need(req, reply, 'member')) return;
-    const { kind, title, with_whom, appt_date, appt_time, location, notes } = req.body || {};
+    const { kind, title, with_whom, appt_date, appt_time, location, notes, accompany_user_id } = req.body || {};
     if (!title || !appt_date) return reply.code(400).send({ error: 'title and date required' });
     const { rows } = await pool.query(
-      `INSERT INTO appointments (parent_id, kind, title, with_whom, appt_date, appt_time, location, notes)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      `INSERT INTO appointments (parent_id, kind, title, with_whom, appt_date, appt_time, location, notes, accompany_user_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.params.parentId, kind || 'appointment', title, with_whom || null, appt_date,
-       appt_time || null, location || null, notes || null]);
+       appt_time || null, location || null, notes || null, accompany_user_id || null]);
     return rows[0];
   });
   app.put('/api/parents/:parentId/appointments/:apptId', async (req, reply) => {

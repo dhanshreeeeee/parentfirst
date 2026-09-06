@@ -731,6 +731,20 @@
   body.big-text .me-feel button, body.big-text .feel-btn{ font-size:22px; min-height:64px; }
 
   .med-actions{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; justify-content:flex-end; }
+
+  .ci-seen{ margin-top:8px; font-size:14px; color:var(--rust); font-weight:600; } .ci-seen.muted{ color:var(--ink-faint); font-weight:400; }
+  .tmw-card{ background:var(--white); border:1px solid var(--border); border-left:5px solid var(--gold); border-radius:var(--r-lg); padding:1rem 1.2rem; }
+  .tmw-when{ font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--gold-dark, #8a5a00); font-weight:700; }
+  .tmw-what{ font-family:var(--font-display); font-size:22px; margin:4px 0 2px; } .tmw-where{ font-size:14px; color:var(--ink-muted); } .tmw-who{ font-size:15px; margin-top:8px; }
+
+  .spark{ background:var(--white); border:1px solid var(--border); border-radius:var(--r-lg); padding:.8rem 1.1rem; margin-bottom:1.1rem; }
+  .sp-head{ display:flex; justify-content:space-between; font-size:13px; color:var(--ink-muted); margin-bottom:6px; } .sp-head b{ color:var(--ink); }
+  .sp-bars{ display:flex; gap:8px; align-items:flex-end; height:52px; } .sp-col{ flex:1; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; height:100%; }
+  .sp-bar{ width:100%; max-width:34px; border-radius:4px 4px 0 0; } .sp-bar.good{ background:var(--sage); } .sp-bar.mid{ background:#d9b24a; } .sp-bar.bad{ background:var(--red); } .sp-bar.na{ background:var(--border); }
+  .sp-lbl{ font-size:10px; color:var(--ink-faint); margin-top:3px; }
+
+  .inst{ background:var(--sage-light); border:1px solid var(--sage); border-radius:var(--r-lg); padding:1rem 1.2rem; }
+  .inst-t{ font-weight:700; font-size:16px; } .inst-s{ font-size:14px; color:var(--ink-muted); margin:4px 0 10px; } .inst-a{ display:flex; gap:8px; flex-wrap:wrap; }
 </style>
 </head>
 <body>
@@ -841,6 +855,7 @@
       <h1 class="pt" id="monTitle">How is <em>everyone?</em></h1>
       <p class="psub">Everything at a glance — today's mood, medicines, vitals, and care team. Your morning-chai check-in.</p>
       <div id="todayHeadline"></div>
+      <div id="adherenceSpark"></div>
       <div id="monitorBody"></div>
       <div id="familyTodos"></div>
     </div>
@@ -848,7 +863,7 @@
     <div class="view" id="view-vault">
       <div class="page-eyebrow">Report Vault</div>
       <div class="vtab-host" data-tab="vault"></div>
-      <h1 class="pt">Papa's medical life, <em>all in one place</em></h1>
+      <h1 class="pt" id="vaultTitle">Medical life, <em>all in one place</em></h1>
       <p class="psub">Every report, organised by date. Upload a PDF or photo and AI extracts every value into the database automatically.</p>
       <div class="score-row" id="scoreRow"></div>
       <div id="healthSummary" class="hs-panel">
@@ -951,14 +966,14 @@
 
     <div class="view" id="view-getcare">
       <div class="page-eyebrow">Get Care</div>
-      <h1 class="pt">What's going on with <em>Papa?</em></h1>
+      <h1 class="pt" id="careChatTitle">What's going on?</h1>
       <p class="psub">Tell us what's happening. We'll suggest the right kind of help — and you can book it in a couple of taps.</p>
 
       <!-- step 1 -->
       <div id="gcStep1">
         <div class="gc-concerns" id="gcConcerns"></div>
         <div style="margin:1.5rem 0 0.5rem;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--ink-faint);">Or describe it in your own words</div>
-        <textarea class="chat-input" id="gcText" placeholder="e.g. Papa has been having knee pain and finds it hard to walk to the market..." style="background:var(--white);min-height:80px;resize:vertical;width:100%;"></textarea>
+        <textarea class="chat-input" id="gcText" placeholder="e.g. Has been having knee pain and finds it hard to walk to the market..." style="background:var(--white);min-height:80px;resize:vertical;width:100%;"></textarea>
         <button class="btn-primary" style="margin-top:1rem;" onclick="runTriage()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> Find the right help</button>
         <div id="gcErr"></div>
       </div>
@@ -979,7 +994,9 @@
       <div class="page-eyebrow">My Day</div>
       <h1 class="pt">Good day, <em id="meName">there</em></h1>
       <p class="psub">Tell your family how you're doing today.</p>
+      <div id="installBanner" style="display:none;margin-bottom:1rem;"></div>
       <div class="checkin-box" id="checkinBox"></div>
+      <div id="meTomorrow" style="display:none;margin-top:1rem;"></div>
       <div class="mon-grid" style="margin-top:1.5rem;">
         <div>
           <h4 style="font-size:14px;font-weight:600;margin-bottom:0.8rem;">Your medicines today</h4>
@@ -998,7 +1015,7 @@
       <h1 class="pt">A note goes <em>a long way</em></h1>
       <p class="psub">Send a message they'll see on their screen. Presence, not just care.</p>
       <div class="msg-compose">
-        <textarea class="chat-input" id="msgBody" placeholder="Thinking of you, Papa. Will call this evening ❤️" style="background:var(--white);min-height:70px;resize:vertical;width:100%;"></textarea>
+        <textarea class="chat-input" id="msgBody" placeholder="Thinking of you. Will call this evening ❤️" style="background:var(--white);min-height:70px;resize:vertical;width:100%;"></textarea>
         <div class="msg-tools">
           <button class="btn-primary" onclick="sendMessage()">Send</button>
           <button class="msg-tool" id="recBtn" onclick="toggleRecord()">🎙️ Record a voice note</button>
@@ -1160,7 +1177,7 @@
     <!-- CARE TEAM -->
     <div class="view" id="view-team">
       <div class="page-eyebrow">Care Team</div>
-      <h1 class="pt">The people looking after <em>Papa</em></h1>
+      <h1 class="pt" id="teamTitle">The people looking after <em>them</em></h1>
       <p class="psub">Your assigned caregivers and specialists — and book a new one whenever you need.</p>
       <div id="teamList"></div>
       <div class="vault-head" style="margin-top:2rem;">
@@ -1651,7 +1668,23 @@ async function switchParent(id){
   loadMonitor();
   nav_('monitor');
 }
+function personLabel(){
+  // "your" for your own record, otherwise the person's first name
+  if(!PARENT) return '';
+  const own = ME && ME.user && PARENT.user_id===ME.user.id && PARENT.relation==='self';
+  return own ? 'your' : (PARENT.name||'').split(' ')[0]+"'s";
+}
+function paintPersonTitles(){
+  const who = personLabel(); if(!who) return;
+  const cap = who==='your' ? 'Your' : who;
+  const set=(id,html)=>{ const el=document.getElementById(id); if(el) el.innerHTML=html; };
+  set('vaultTitle', esc(cap)+' medical life, <em>all in one place</em>');
+  set('careChatTitle', who==='your' ? 'What\'s going on with <em>you?</em>' : 'What\'s going on with <em>'+esc((PARENT.name||'').split(' ')[0])+'?</em>');
+  set('teamTitle', 'The people looking after <em>'+(who==='your'?'you':esc((PARENT.name||'').split(' ')[0]))+'</em>');
+  const mb=document.getElementById('msgBody'); if(mb) mb.placeholder = who==='your' ? 'A note for the family ❤️' : 'Thinking of you, '+(PARENT.name||'').split(' ')[0]+'. Will call this evening ❤️';
+}
 function paintParent(){
+  paintPersonTitles();
   if(!PARENT) return;
   const first = (PARENT.name||'').split(' ')[0];
   const mine = ME && ME.user && PARENT.name === ME.user.name;
@@ -1830,6 +1863,7 @@ async function boot(){
   if(!PARENT){ startOnboarding(); return; }        // last guard: never proceed with a null person
   IS_DEPENDENT = !!(ME.is_dependent && PARENT.role==='dependent');
   applyDependentMode();
+  setTimeout(maybeShowInstall, 800);
   paintParent();
   try{ await applyProfileAdaptations(); }catch(e){}
   try{ applyRoleUI(); }catch(e){}
@@ -2276,6 +2310,23 @@ async function loadMeds(){
       + '<button class="med-edit" data-req="meds" onclick="editMed(\''+m.id+'\')">Edit</button> <button class="med-del" data-req="meds" onclick="delMed(\''+m.id+'\')">Remove</button></div></div>';
   }).join('') || '';
 }
+// ── Install to home screen: an icon on their phone, not a URL ──
+let _installEvt=null;
+window.addEventListener('beforeinstallprompt', e=>{ e.preventDefault(); _installEvt=e; maybeShowInstall(); });
+function isStandalone(){ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }
+function maybeShowInstall(){
+  if(isStandalone() || localStorage.getItem('pf_install_dismissed')==='1') return;
+  const host=document.getElementById('installBanner'); if(!host) return;
+  const ios=/iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+  if(!_installEvt && !ios) return;
+  host.style.display='block';
+  host.innerHTML='<div class="inst"><div class="inst-t">Put ParentFirst on your home screen</div>'
+    + '<div class="inst-s">'+(ios?'Tap the Share button below, then <b>Add to Home Screen</b>.':'One tap, then it opens like any other app.')+'</div>'
+    + '<div class="inst-a">'+(ios?'':'<button class="btn-primary" onclick="doInstall()">Add to home screen</button> ')
+    + '<button class="btn-out" onclick="dismissInstall()">Not now</button></div></div>';
+}
+async function doInstall(){ if(!_installEvt) return; _installEvt.prompt(); const r=await _installEvt.userChoice; if(r.outcome==='accepted') dismissInstall(); }
+function dismissInstall(){ localStorage.setItem('pf_install_dismissed','1'); const h=document.getElementById('installBanner'); if(h) h.style.display='none'; }
 function toggleBigText(){
   const now=!document.body.classList.contains('big-text');
   localStorage.setItem('pf_bigtext', now?'1':'0');
@@ -2511,6 +2562,18 @@ document.addEventListener('click', function(e){
 });
 
 // ═══════════ PARENT MONITOR ═══════════
+async function loadAdherenceSpark(){
+  const host=document.getElementById('adherenceSpark'); if(!host) return;
+  let a; try{ a=await j('/api/parents/'+PARENT.id+'/medications/adherence'); }catch(e){ host.innerHTML=''; return; }
+  if(!a.days.some(d=>d.due>0)){ host.innerHTML=''; return; }
+  const bars=a.days.map(d=>{
+    const h = d.pct==null?6:Math.max(6, Math.round(d.pct*0.4));
+    const cls = d.pct==null?'na':d.pct>=90?'good':d.pct>=60?'mid':'bad';
+    const lbl = new Date(d.date+'T00:00:00').toLocaleDateString('en-IN',{weekday:'narrow'});
+    return '<div class="sp-col" title="'+d.date+': '+(d.pct==null?'no doses due':d.done+'/'+d.due+' taken')+'"><div class="sp-bar '+cls+'" style="height:'+h+'px"></div><div class="sp-lbl">'+lbl+'</div></div>';
+  }).join('');
+  host.innerHTML='<div class="spark"><div class="sp-head"><span>Medicines this week</span><b>'+(a.avg==null?'—':a.avg+'%')+'</b></div><div class="sp-bars">'+bars+'</div></div>';
+}
 function renderHeadline(h){
   const host=document.getElementById('todayHeadline'); if(!host||!h) return;
   const icon = h.state==='ok'?'&#10003;':h.state==='urgent'?'&#9888;':'&#8226;';
@@ -2568,6 +2631,7 @@ async function loadMonitor(){
   catch(e){ document.getElementById('monitorBody').innerHTML='<div class="err-box">'+esc(e.message)+'</div>'; return; }
   renderHeadline(m.headline);
   loadFamilyTodos();
+  loadAdherenceSpark();
   const upd = m.today && m.today.family_update ? m.today.family_update : 'No update logged yet today. The caregiver can add one in Daily Care.';
   const mood = m.today && m.today.mood ? m.today.mood : null;
   const vitalCards = m.key_vitals.map(v=>{
@@ -2731,7 +2795,7 @@ async function loadAppts(){
     return '<div class="appt-card'+(overdue?' appt-overdue':'')+'">'
       + '<div class="appt-ic">'+icon+'</div>'
       + '<div class="appt-main"><div class="appt-title">'+esc(a.title)+(overdue?' <span class="appt-flag">overdue</span>':'')+'</div>'
-      + '<div class="appt-meta">'+fmtDate(a.appt_date)+(a.appt_time?' · '+esc(a.appt_time):'')+(a.with_whom?' · '+esc(a.with_whom):'')+(a.location?' · '+esc(a.location):'')+'</div>'
+      + '<div class="appt-meta">'+fmtDate(a.appt_date)+(a.appt_time?' · '+esc(a.appt_time):'')+(a.with_whom?' · '+esc(a.with_whom):'')+(a.location?' · '+esc(a.location):'')+(a.accompany_name?' · <b>'+esc(a.accompany_name.split(' ')[0])+' taking</b>':'')+'</div>'
       + (a.notes?'<div class="appt-note">'+esc(a.notes)+'</div>':'')+'</div>'
       + '<div class="appt-actions">'
       + (a.status==='upcoming'
@@ -2778,6 +2842,9 @@ async function delAppt(id){
   catch(e){ toast(e.message,'error'); }
 }
 async function openAddAppt(){
+  let members=[];
+  try{ const fams=(await j('/api/families')).families; const fid=ACTIVE_FAMILY||(PARENT&&PARENT.family_id)||(fams[0]&&fams[0].id);
+       if(fid) members=(await j('/api/families/'+fid+'/members')).members||[]; }catch(e){}
   const res = await formModal({
     title:'Add appointment or reminder',
     submitLabel:'Add',
@@ -2788,6 +2855,7 @@ async function openAddAppt(){
       {id:'appt_date', label:'Date', type:'date'},
       {id:'appt_time', label:'Time (optional)', placeholder:'e.g. 11:30 AM'},
       {id:'location', label:'Where (optional)', placeholder:'e.g. Apollo Clinic'},
+      {id:'accompany_user_id', label:'Who\'s taking them?', options:[{value:'',label:'Not decided yet',selected:true}].concat(members.map(m=>({value:m.user_id,label:m.name})))},
       {id:'notes', label:'Notes (optional)', placeholder:'e.g. Carry June report'},
     ],
   });
@@ -2829,14 +2897,32 @@ async function explainInsights(){
 const FEELINGS=[['good','😊','I\'m good'],['okay','🙂','Just okay'],['not_well','🤒','Not well'],['need_help','🆘','I need help']];
 async function loadMyDay(){
   document.getElementById('meName').textContent = (PARENT.name||'').split(' ')[0];
-  let today=null;
-  try{ const c = await j('/api/parents/'+PARENT.id+'/checkins'); today=c.today; }catch(e){}
+  let today=null, seenBy=[], nextAp=null;
+  try{ const c = await j('/api/parents/'+PARENT.id+'/checkins'); today=c.today; seenBy=c.seen_by||[]; nextAp=c.next_appointment||null; }catch(e){}
+  const seenLine = seenBy.length
+    ? '<div class="ci-seen">&#10084;&#65039; '+esc(seenBy.map(x=>x.name.split(' ')[0]).join(', '))+' saw this</div>'
+    : (today ? '<div class="ci-seen muted">Your family will see this</div>' : '');
   document.getElementById('checkinBox').innerHTML =
     today
       ? '<div class="ci-done">✓ You told your family you\'re feeling <strong>'+esc((FEELINGS.find(f=>f[0]===today.feeling)||[])[2]||today.feeling)+'</strong> today.'
         + (today.note?'<div class="ci-note">"'+esc(today.note)+'"</div>':'')
+        + seenLine
         + '<button class="ci-change" onclick="showCheckinForm()">Change my answer</button></div>'
       : checkinForm();
+  // Tomorrow / next appointment, in plain words
+  const tmw=document.getElementById('meTomorrow');
+  if(tmw){
+    if(nextAp){
+      const d=new Date(nextAp.appt_date); const t0=new Date(); t0.setHours(0,0,0,0);
+      const days=Math.round((d-t0)/864e5);
+      const when = days===0?'Today':days===1?'Tomorrow':days<7?d.toLocaleDateString('en-IN',{weekday:'long'}):d.toLocaleDateString('en-IN',{day:'numeric',month:'long'});
+      tmw.style.display='block';
+      tmw.innerHTML='<div class="tmw-card"><div class="tmw-when">'+esc(when)+(nextAp.appt_time?' · '+esc(nextAp.appt_time):'')+'</div>'
+        + '<div class="tmw-what">'+esc(nextAp.title)+(nextAp.with_whom?' with '+esc(nextAp.with_whom):'')+'</div>'
+        + (nextAp.location?'<div class="tmw-where">'+esc(nextAp.location)+'</div>':'')
+        + '<div class="tmw-who">'+(nextAp.accompany_name?esc(nextAp.accompany_name.split(' ')[0])+' is taking you.':'Your family will tell you who\'s coming.')+'</div></div>';
+    } else tmw.style.display='none';
+  }
   // meds
   try{
     const t = await j('/api/parents/'+PARENT.id+'/medications/today');
@@ -4135,12 +4221,14 @@ async function loadChecklist(){
 // ═══════════ DOCTOR SUMMARY (the growth loop) ═══════════
 async function doctorSummary(){
   const pid = PARENT.id;
-  const [em, meds, vits, reps, risk] = await Promise.all([
+  toast('Preparing the doctor summary…','info');
+  const [em, meds, vits, reps, risk, hs] = await Promise.all([
     j('/api/parents/'+pid+'/emergency-card'),
     j('/api/parents/'+pid+'/medications'),
     j('/api/parents/'+pid+'/vitals'),
     j('/api/parents/'+pid+'/reports'),
     j('/api/parents/'+pid+'/risk-awareness').catch(()=>null),
+    j('/api/parents/'+pid+'/health-summary').catch(()=>null),
   ]);
   const slot=m=>['morning','afternoon','night'].filter(x=>m['slot_'+x]).map(x=>({morning:'Morning',afternoon:'Afternoon',night:'Night'})[x]).join(' · ')||'—';
   const food={before:'before food',after:'after food',with:'with food'};
@@ -4174,6 +4262,10 @@ async function doctorSummary(){
     +'</table>'
     +(em.doctor?'<h2>Regular doctor</h2><div>'+esc(em.doctor)+(em.doctor_phone?' · '+esc(em.doctor_phone):'')+'</div>':'')
     +'<div class="foot">Family contact: '+esc(ME.user.name)+' ('+esc(ME.user.email)+'). Generated by ParentFirst — the family\'s shared health record.</div>'
+    +(hs && hs.summary ? '<h2>Summary of all records</h2><p>'+esc(hs.summary)+'</p>'
+      +(hs.watch&&hs.watch.length?'<h3>Worth watching</h3><ul>'+hs.watch.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')
+      +(hs.discuss_with_doctor&&hs.discuss_with_doctor.length?'<h3>Questions for today</h3><ul>'+hs.discuss_with_doctor.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'')
+      +'<p style="font-size:11px;color:#777;">'+esc(hs.disclaimer||'')+'</p>' : '')
     +'</body></html>');
   w.document.close();
 }
