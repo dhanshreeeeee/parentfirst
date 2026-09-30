@@ -15,14 +15,21 @@ import { fileURLToPath } from 'node:url';
 import { extractLocal } from './extract-local.js';
 import careRoutes from './routes-care.js';
 import familyRoutes from './routes-family.js';
-import { createFamily, addPersonToFamily, addUserToFamily, addCareRelationship } from './family.js';
+import { createFamily, addPersonToFamily, addUserToFamily, addCareRelationship, accessToPerson, can } from './family.js';
 import { startDigest } from './digest.js';
 import { startCareLoop } from './care_loop.js';
 import webpush from 'web-push';
+import { putFile, getFile, deleteFile, getSetting, setSetting } from './storage.js';
+import { aiEnabled, callModel } from './ai.js';
+import { runExtraction, buildAnalysis, narrate } from './report-intel.js';
 import authPlugin, { ensureSeed, roleAtLeast } from './auth.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPORTS_DIR = path.join(__dirname, '..', 'data', 'reports');
+// Where uploaded files live. Local dev keeps them in ./data; a host with an
+// ephemeral filesystem (Render, Fly, Heroku) MUST point DATA_DIR at a mounted
+// disk or every report vanishes on the next deploy.
+const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
+const REPORTS_DIR = path.join(DATA_DIR, 'reports');
 // local calendar date (Postgres DATE columns are timezone-sensitive)
 const localDateStr = (d = new Date()) =>
   new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -32,7 +39,11 @@ const pool = new pg.Pool({
     process.env.DATABASE_URL ||
     `postgres://${process.env.USER || 'postgres'}@localhost:5432/parentfirst_vault`,
   // most hosted Postgres (Railway, Render, Neon, Supabase) requires SSL
-  ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : undefined,
+  // Hosted Postgres needs TLS. This used to require PGSSL=require to be set by
+  // hand; forgetting it produced a connection error that named nothing useful.
+  ssl: (process.env.PGSSL === 'require'
+        || /render\.com|neon\.tech|supabase|amazonaws|railway/.test(process.env.DATABASE_URL || ''))
+    ? { rejectUnauthorized: false } : undefined,
   max: 10,
 });
 
@@ -104,36 +115,9 @@ await app.register(authPlugin, { pool });
 app.get('/caregiver', (req, reply) => reply.sendFile('caregiver.html'));
 
 // ── helpers ─────────────────────────────────────────────────────
-async function callClaude(content, maxTokens = 1024) {
-  if (!ANTHROPIC_KEY) {
-    const err = new Error('ANTHROPIC_API_KEY not set in .env');
-    err.statusCode = 503;
-    throw err;
-  }
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: maxTokens,
-      messages: [{ role: 'user', content }],
-    }),
-  });
-  if (!res.ok) {
-    const body = await res.text();
-    const err = new Error(`Anthropic API ${res.status}: ${body.slice(0, 300)}`);
-    err.statusCode = 502;
-    throw err;
-  }
-  const data = await res.json();
-  return data.content
-    .filter((c) => c.type === 'text')
-    .map((c) => c.text)
-    .join('\n');
+// kept for existing callers; new code should call callModel({ tier, ... }) directly
+async function callClaude(content, maxTokens = 1024, tier = 'extract') {
+  return callModel({ tier, content, maxTokens });
 }
 
 async function getRanges() {
@@ -173,11 +157,22 @@ function statusOf(ranges, name, value) {
   return 'ok';
 }
 
+
+// ONE rule for "may this user see this report?" — the same canonical check as
+// everything else (private vaults, per-person permissions, revocation).
+// No access answers 404, so an outsider can't even confirm a report exists.
+async function reportFor(req, reply, perm = 'VIEW_REPORTS') {
+  const { rows: [r] } = await pool.query('SELECT id, parent_id FROM reports WHERE id=$1', [req.params.id]);
+  const access = r ? await accessToPerson(pool, req.user.id, r.parent_id) : null;
+  if (!r || !access || !can(access, perm)) { reply.code(404).send({ error: 'not found' }); return null; }
+  return r;
+}
+
 async function fetchReportWithParams(reportId) {
   const { rows } = await pool.query('SELECT * FROM reports WHERE id=$1', [reportId]);
   if (!rows[0]) return null;
   const { rows: params } = await pool.query(
-    `SELECT name, value::float AS value, unit,
+    `SELECT name, value::float AS value, unit, category, lab_flag, verified, first_read::float AS first_read,
             ref_low::float AS ref_low, ref_high::float AS ref_high, ref_text
      FROM report_params WHERE report_id=$1 ORDER BY name`,
     [reportId],
@@ -188,7 +183,9 @@ async function fetchReportWithParams(reportId) {
 // ── health check ────────────────────────────────────────────────
 app.get('/api/health', async () => {
   const { rows } = await pool.query('SELECT 1 AS ok');
-  return { ok: rows[0].ok === 1, ai: !!ANTHROPIC_KEY, model: ANTHROPIC_MODEL };
+  const { emailTransport } = await import('./notify.js');
+  const { MODELS } = await import('./ai.js');
+  return { ok: rows[0].ok === 1, ai: !!ANTHROPIC_KEY, models: { extract: MODELS.extract, analyse: MODELS.analyse, fast: MODELS.fast }, email: emailTransport() };
 });
 
 // ── parents (scoped to the logged-in user's family) ─────────────
@@ -286,6 +283,7 @@ app.get('/api/parents/:parentId/reports', async (req) => {
 });
 
 app.get('/api/reports/:id', async (req, reply) => {
+  if (!(await reportFor(req, reply))) return;
   const rep = await fetchReportWithParams(req.params.id);
   if (!rep) return reply.code(404).send({ error: 'not found' });
   const ranges = await getRanges();
@@ -304,23 +302,21 @@ app.delete('/api/reports/:id', async (req, reply) => {
   if (!rows[0]) return reply.code(403).send({ error: 'no access' });
   if (!roleAtLeast(rows[0].role, 'admin')) return reply.code(403).send({ error: 'admin access required' });
   await pool.query('DELETE FROM reports WHERE id=$1', [req.params.id]);
-  try { await fs.promises.unlink(path.join(REPORTS_DIR, req.params.id)); } catch { /* no file */ }
+  await deleteFile(pool, 'report', req.params.id);
+  try { await fs.promises.unlink(path.join(REPORTS_DIR, req.params.id)); } catch { /* no legacy file */ }
   return { deleted: true };
 });
 
 // stream the original uploaded file (access-checked)
 app.get('/api/reports/:id/file', async (req, reply) => {
-  const { rows } = await pool.query(
-    `SELECT r.file_mime, r.file_name, r.has_file FROM reports r
-     JOIN family_members fm ON fm.parent_id = r.parent_id AND fm.user_id=$1
-     WHERE r.id=$2`, [req.user.id, req.params.id]);
-  if (!rows[0]) return reply.code(403).send({ error: 'no access' });
+  const rr = await reportFor(req, reply); if (!rr) return;
+  const { rows } = await pool.query('SELECT has_file, file_mime, file_name FROM reports WHERE id=$1', [req.params.id]);
   if (!rows[0].has_file) return reply.code(404).send({ error: 'no original file stored for this report' });
-  const filePath = path.join(REPORTS_DIR, req.params.id);
-  if (!fs.existsSync(filePath)) return reply.code(404).send({ error: 'file missing on disk' });
-  reply.header('Content-Type', rows[0].file_mime || 'application/octet-stream');
+  const f = await getFile(pool, 'report', req.params.id, path.join(REPORTS_DIR, req.params.id));
+  if (!f) return reply.code(404).send({ error: 'The original file is no longer stored. Please upload it again.' });
+  reply.header('Content-Type', rows[0].file_mime || f.mime || 'application/octet-stream');
   reply.header('Content-Disposition', `inline; filename="${(rows[0].file_name || 'report').replace(/"/g, '')}"`);
-  return reply.send(fs.createReadStream(filePath));
+  return reply.send(f.bytes);
 });
 
 // Manual report creation (no AI needed) — body: {parent_id, report_type, lab_name, doctor_name, report_date, params:[{name,value,unit}]}
@@ -356,115 +352,107 @@ app.post('/api/reports', async (req, reply) => {
 });
 
 // ── AI extraction: multipart upload (pdf/jpg/png) → parsed report in DB ──
-app.post('/api/parents/:parentId/extract', async (req, reply) => {
-  const file = await req.file();
-  if (!file) return reply.code(400).send({ error: 'file required (multipart field "file")' });
-  const buf = await file.toBuffer();
-  const isPdf = file.mimetype.includes('pdf');
+// ── upload a report: read every row → verify → second read → save ────────
+const HONORIFICS = new Set(['mr', 'mrs', 'ms', 'miss', 'dr', 'shri', 'smt', 'kumari', 'master', 'baby']);
+const nameTokens = (x) => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter((t) => t && !HONORIFICS.has(t));
+const canUploadFor = (req) => roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent';
 
-  let obj = null;
-  let method = 'local';
-
-  // ── 1) FREE path: local text extraction for digital PDFs ──
-  if (isPdf) {
-    try {
-      const local = await extractLocal(buf);
-      if (local.ok) {
-        obj = { type: local.type, lab: local.lab, doctor: local.doctor, date: local.date, params: local.params };
-        app.log.info(`extract: local path succeeded (${local.params.length} params, no AI cost)`);
-      } else {
-        app.log.info(`extract: local path insufficient (${local.reason}) → AI fallback`);
-      }
-    } catch (e) {
-      app.log.warn(`extract: local path errored (${e.message}) → AI fallback`);
-    }
-  }
-
-  // ── 2) FALLBACK: AI vision (scanned PDFs, images, unknown layouts) ──
-  if (!obj) {
-    method = 'ai';
-    const b64 = buf.toString('base64');
-    const docBlock = isPdf
-      ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b64 } }
-      : { type: 'image', source: { type: 'base64', media_type: file.mimetype, data: b64 } };
-    const instruction = {
-      type: 'text',
-      text: `Extract this medical/blood report into JSON ONLY (no markdown, no prose). Schema:
-{"type":"report type","lab":"lab name","doctor":"doctor name or empty string","date":"YYYY-MM-DD","params":[{"name":"parameter name","value":number,"unit":"unit","ref_low":number or null,"ref_high":number or null,"ref_text":"the reference range exactly as printed, or empty"}]}
-IMPORTANT: most lab reports print a reference/biological interval next to each result (e.g. "0.66 - 1.25", "137 - 145", "< 50", "up to 2.0"). Capture it: put the numeric bounds in ref_low/ref_high where you can, and the printed text in ref_text. For "< 50" use ref_low 0 and ref_high 50. If no range is printed, use null.
-Use these canonical names where they match: Hemoglobin, HbA1c, Fasting Glucose, Total Cholesterol, LDL Cholesterol, HDL Cholesterol, Triglycerides, Creatinine, Vitamin D, Vitamin B12, TSH, Platelets, WBC.
-Only include numeric parameters. Return ONLY the JSON object.`,
-    };
-    const raw = await callClaude([docBlock, instruction], 2048);
-    const clean = raw.replace(/```json/g, '').replace(/```/g, '').trim();
-    try {
-      obj = JSON.parse(clean);
-    } catch {
-      return reply.code(422).send({ error: 'AI returned unparseable JSON', raw: clean.slice(0, 500) });
-    }
-  }
-  obj._method = method;
-
-  // Whose report is this? A mismatch usually means the wrong person is selected.
-  const { rows: prow } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
-  const normName = (x) => String(x || '').toLowerCase().replace(/[^a-z ]/g, ' ').split(/\s+/).filter(Boolean);
-  const pa = normName(obj.patient); const pb = normName(prow[0]?.name);
-  const mismatch = !!(pa.length && pb.length && !pa.some((t) => pb.includes(t)));
-  const force = String(req.query?.force || '') === '1';
-  if (mismatch && !force) {
-    return reply.code(200).send({
-      needs_confirm: true,
-      report_name: obj.patient, expected_name: prow[0]?.name,
-      message: `This report reads as ${obj.patient}, but you're uploading to ${prow[0]?.name}'s record.`,
-    });
-  }
-
+async function saveReport({ parentId, obj, stats, method, buf, mime, fileName }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { rows } = await client.query(
-      `INSERT INTO reports (parent_id, report_type, lab_name, doctor_name, report_date, source_file, raw_extraction)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [
-        req.params.parentId,
-        obj.type || 'Uploaded Report',
-        obj.lab || null,
-        obj.doctor || null,
-        obj.date || new Date().toISOString().slice(0, 10),
-        file.filename,
-        JSON.stringify(obj),
-      ],
-    );
-    const rep = rows[0];
+    const { rows: [rep] } = await client.query(
+      `INSERT INTO reports (parent_id, report_type, lab_name, doctor_name, report_date, source_file, raw_extraction,
+                            patient_name, patient_age, patient_sex, qualitative, extraction_stats)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [parentId, obj.type || 'Lab report', obj.lab || null, obj.doctor || null,
+       /^\d{4}-\d{2}-\d{2}$/.test(obj.date || '') ? obj.date : new Date().toISOString().slice(0, 10),
+       fileName, JSON.stringify({ ...obj, _method: method }),
+       obj.patient_name || obj.patient || null, obj.patient_age || null, obj.patient_sex || null,
+       JSON.stringify(obj.qualitative || []), stats ? JSON.stringify(stats) : null]);
     for (const p of obj.params || []) {
-      if (typeof p.value !== 'number') continue;
+      if (typeof p.value !== 'number' || !Number.isFinite(p.value)) continue;
       await client.query(
-        `INSERT INTO report_params (report_id, name, value, unit, ref_low, ref_high, ref_text)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        `INSERT INTO report_params (report_id, name, value, unit, ref_low, ref_high, ref_text, category, lab_flag, verified, first_read)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
         [rep.id, p.name, p.value, p.unit || null,
-         typeof p.ref_low === 'number' ? p.ref_low : null,
-         typeof p.ref_high === 'number' ? p.ref_high : null,
-         p.ref_text || null],
-      );
+         typeof p.ref_low === 'number' ? p.ref_low : null, typeof p.ref_high === 'number' ? p.ref_high : null,
+         p.ref_text || null, p.category || null, p.flag || p.lab_flag || null, p.verified || (method === 'local' ? 'unchecked' : null),
+         typeof p.first_read === 'number' ? p.first_read : null]);
     }
-    // keep the original file on disk so it can be viewed later
-    try {
-      await fs.promises.mkdir(REPORTS_DIR, { recursive: true });
-      await fs.promises.writeFile(path.join(REPORTS_DIR, rep.id), buf);
-      await client.query(
-        'UPDATE reports SET has_file=true, file_name=$2, file_mime=$3 WHERE id=$1',
-        [rep.id, file.filename, file.mimetype]);
-    } catch (e) {
-      app.log.warn('could not store original file: ' + e.message);
+    if (buf) {
+      await putFile(client, 'report', rep.id, mime, buf, fileName);
+      await client.query('UPDATE reports SET has_file=true, file_name=$2, file_mime=$3 WHERE id=$1', [rep.id, fileName, mime]);
     }
     await client.query('COMMIT');
     return await fetchReportWithParams(rep.id);
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
+  } catch (e) { await client.query('ROLLBACK'); throw e; }
+  finally { client.release(); }
+}
+
+app.post('/api/parents/:parentId/extract', async (req, reply) => {
+  if (!canUploadFor(req)) return reply.code(403).send({ error: 'You can view this record but not add reports to it. Ask the family admin.' });
+  const file = await req.file();
+  if (!file) return reply.code(400).send({ error: 'Choose a PDF or photo of the report.' });
+  const buf = await file.toBuffer();
+  const mime = file.mimetype || 'application/octet-stream';
+  const isPdf = mime.includes('pdf');
+  if (!isPdf && !mime.startsWith('image/')) return reply.code(415).send({ error: 'Upload a PDF or a photo (JPG/PNG) of the report.' });
+
+  let obj = null, stats = null, method;
+  if (aiEnabled()) {
+    method = 'ai';
+    try { ({ obj, stats } = await runExtraction({ buf, mime })); }
+    catch (e) {
+      req.log.error('extract: ' + e.message);
+      return reply.code(e.statusCode === 503 ? 503 : 502).send({ error: 'We couldn\'t read this report right now. Please try again in a minute.' });
+    }
+  } else if (isPdf) {
+    method = 'local';
+    try {
+      const local = await extractLocal(buf);
+      if (local.ok) obj = { type: local.type, lab: local.lab, doctor: local.doctor, date: local.date, params: local.params, qualitative: [] };
+    } catch (e) { req.log.warn('extract local: ' + e.message); }
+    if (!obj) return reply.code(503).send({ error: 'Reading this report needs the AI key (ANTHROPIC_API_KEY) to be set.' });
+  } else {
+    return reply.code(503).send({ error: 'Reading photos of reports needs the AI key (ANTHROPIC_API_KEY) to be set.' });
   }
+  if (!(obj.params || []).length && !(obj.qualitative || []).length) {
+    return reply.code(422).send({ error: 'No test results could be read from this file. Is it a lab report?' });
+  }
+
+  // Whose report is this? A mismatch usually means the wrong person is selected.
+  const { rows: prow } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
+  const printed = obj.patient_name || obj.patient;
+  const pa = nameTokens(printed), pb = nameTokens(prow[0]?.name);
+  const mismatch = !!(pa.length && pb.length && !pa.some((t) => pb.includes(t)));
+  if (mismatch && String(req.query?.force || '') !== '1') {
+    // keep the reading as a draft, so confirming doesn't re-read (or re-bill) the whole report
+    const { rows: [d] } = await pool.query(
+      `INSERT INTO report_drafts (parent_id, created_by, obj, stats, method, mime, file_name, bytes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [req.params.parentId, req.user.id, JSON.stringify(obj), stats ? JSON.stringify(stats) : null, method, mime, file.filename, buf]);
+    return reply.code(200).send({
+      needs_confirm: true, draft_id: d.id, report_name: printed, expected_name: prow[0]?.name,
+      message: `This report is for ${printed}, but you're adding it to ${prow[0]?.name}'s record.`,
+    });
+  }
+  return saveReport({ parentId: req.params.parentId, obj, stats, method, buf, mime, fileName: file.filename });
+});
+
+// "Yes, it's the right person" — save the draft without reading the file again
+app.post('/api/report-drafts/:id/confirm', async (req, reply) => {
+  const { rows: [d] } = await pool.query('SELECT * FROM report_drafts WHERE id=$1 AND created_by=$2', [req.params.id, req.user.id]);
+  if (!d) return reply.code(404).send({ error: 'This upload has expired. Please upload the report again.' });
+  const access = await accessToPerson(pool, req.user.id, d.parent_id);
+  if (!access) return reply.code(403).send({ error: 'no access' });
+  const rep = await saveReport({ parentId: d.parent_id, obj: d.obj, stats: d.stats, method: d.method, buf: d.bytes, mime: d.mime, fileName: d.file_name });
+  await pool.query('DELETE FROM report_drafts WHERE id=$1', [d.id]);
+  return rep;
+});
+app.delete('/api/report-drafts/:id', async (req) => {
+  await pool.query('DELETE FROM report_drafts WHERE id=$1 AND created_by=$2', [req.params.id, req.user.id]);
+  return { deleted: true };
 });
 
 // ── compare two reports ─────────────────────────────────────────
@@ -535,7 +523,7 @@ Write 3-4 warm, plain-English sentences. Flag anything outside its reference ran
 EARLIER report (${dEarlier}, ${ra.report_type}): ${JSON.stringify(ra.params)}
 LATER report (${dLater}, ${rb.report_type}): ${JSON.stringify(rb.params)}`;
   try {
-    const text = await callClaude(prompt);
+    const text = await callClaude(prompt, 1024, 'analyse');
     return { summary: text };
   } catch (e) {
     return reply.code(200).send({ summary: null, error: 'The AI summary is temporarily unavailable. The comparison above is still accurate.' });
@@ -620,7 +608,7 @@ await app.register(careRoutes, {
 
 
 // ── document vault: upload & download ───────────────────────────
-const DOCS_DIR = path.join(__dirname, '..', 'data', 'documents');
+const DOCS_DIR = path.join(DATA_DIR, 'documents');
 
 app.post('/api/parents/:parentId/documents', async (req, reply) => {
   if (!roleAtLeast(req.parentRole, 'member')) return reply.code(403).send({ error: 'member access required' });
@@ -633,8 +621,7 @@ app.post('/api/parents/:parentId/documents', async (req, reply) => {
     `INSERT INTO documents (parent_id, title, category, file_name, file_mime, uploaded_by)
      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
     [req.params.parentId, title, category, file.filename, file.mimetype, req.user.id]);
-  await fs.promises.mkdir(DOCS_DIR, { recursive: true });
-  await fs.promises.writeFile(path.join(DOCS_DIR, rows[0].id), buf);
+  await putFile(pool, 'document', rows[0].id, file.mimetype, buf, file.filename);
   return rows[0];
 });
 
@@ -644,15 +631,17 @@ app.get('/api/documents/:id/file', async (req, reply) => {
      JOIN family_members fm ON fm.parent_id=d.parent_id AND fm.user_id=$1
      WHERE d.id=$2`, [req.user.id, req.params.id]);
   if (!rows[0]) return reply.code(403).send({ error: 'no access' });
-  const p = path.join(DOCS_DIR, req.params.id);
-  if (!fs.existsSync(p)) return reply.code(404).send({ error: 'file missing' });
-  reply.header('Content-Type', rows[0].file_mime || 'application/octet-stream');
+  const f = await getFile(pool, 'document', req.params.id, path.join(DOCS_DIR, req.params.id));
+  if (!f) return reply.code(404).send({ error: 'The original file is no longer stored. Please upload it again.' });
+  reply.header('Content-Type', rows[0].file_mime || f.mime || 'application/octet-stream');
   reply.header('Content-Disposition', `inline; filename="${(rows[0].file_name || 'document').replace(/"/g, '')}"`);
-  return reply.send(fs.createReadStream(p));
+  return reply.send(f.bytes);
 });
 
 // ── medicine info: what it's for + common side effects (AI, cached on the row) ──
 app.get('/api/medications/:id/info', async (req, reply) => {
+  const { rows: [own] } = await pool.query('SELECT parent_id FROM medications WHERE id=$1', [req.params.id]);
+  if (!own || !(await accessToPerson(pool, req.user.id, own.parent_id))) return reply.code(404).send({ error: 'not found' });
   const { rows } = await pool.query(
     `SELECT m.*, mi.purpose, mi.side_effects, mi.cautions FROM medications m
      LEFT JOIN medicine_info mi ON lower(mi.name)=lower(split_part(m.name,' ',-1))
@@ -665,7 +654,7 @@ app.get('/api/medications/:id/info', async (req, reply) => {
     const prompt = `For the medicine "${med.name}"${med.dosage?(' ('+med.dosage+')'):''}, give STRICT JSON only:
 {"generic":"active ingredient if identifiable or empty","purpose":"one plain sentence a family caregiver understands — what it is commonly prescribed for","side_effects":["3-6 common side effects, each 1-4 words"],"cautions":"one short sentence on the single most important caution, or empty"}
 This is general medicine information, NOT medical advice for a specific person. If the name is unclear or not a recognisable medicine, return {"purpose":"","side_effects":[],"cautions":""}.`;
-    const raw = await callClaude([{ type:'text', text: prompt }], 500);
+    const raw = await callClaude([{ type:'text', text: prompt }], 500, 'fast');
     const obj = JSON.parse(raw.replace(/```json|```/g,'').trim());
     if (obj.purpose) {
       await pool.query(
@@ -716,7 +705,7 @@ Return STRICT JSON only:
 }
 RULES: Never state a diagnosis as fact — say "may be worth checking" not "you have". Every risk-type statement must point to the doctor, not to a self-treatment. Be warm and clear, not alarming. This is educational, not a medical opinion.`;
   try {
-    const raw = await callClaude([{ type:'text', text: prompt }], 1200);
+    const raw = await callClaude([{ type:'text', text: prompt }], 1200, 'analyse');
     const obj = JSON.parse(raw.replace(/```json|```/g,'').trim());
     return { ok:true, ...obj, generated_at:new Date().toISOString(),
       disclaimer:'This is an AI-generated summary to help you understand the records — not a medical diagnosis. Always confirm with a doctor.' };
@@ -798,8 +787,7 @@ CRITICAL RULES:
        JSON.stringify({ diagnosis: rx.diagnosis, complaints: rx.complaints || [],
                         tests_advised: rx.tests_advised || [], vitals: rx.vitals || {},
                         patient_name: rx.patient_name || null })]);
-    await fs.promises.mkdir(REPORT_DIR, { recursive: true });
-    await fs.promises.writeFile(path.join(REPORT_DIR, rep[0].id), buf);
+    await putFile(pool, 'report', rep[0].id, file.mimetype, buf, file.filename);
 
     // name check — the report may belong to someone else in the family
     const { rows: pr } = await pool.query('SELECT name FROM parents WHERE id=$1', [req.params.parentId]);
@@ -850,12 +838,54 @@ app.post('/api/parents/:parentId/prescription/confirm', async (req, reply) => {
   return { ok: true, added };
 });
 
+// ── full analysis of one report: every row, printed ranges, trends, careful narrative ──
+// The narrative is cached on the report, so opening it again costs nothing.
+app.get('/api/reports/:id/analysis', async (req, reply) => {
+  const r = await reportFor(req, reply); if (!r) return;
+  const rep = await fetchReportWithParams(req.params.id);
+  const ranges = await getRanges();
+  const { rows: previous } = await pool.query(
+    `SELECT rp.name, rp.value::float AS value, rp2.report_date FROM report_params rp
+     JOIN reports rp2 ON rp2.id = rp.report_id
+     WHERE rp2.parent_id=$1 AND rp2.report_date < $2 AND rp2.id <> $3 ORDER BY rp2.report_date DESC`,
+    [r.parent_id, rep.report_date, rep.id]);
+  const a = buildAnalysis({ ...rep, qualitative: rep.qualitative || [] },
+    rep.params.map((p) => ({ ...p, lab_flag: p.lab_flag })), previous,
+    (p) => { const x = effectiveRange(ranges, p); return x ? { min: x.min, max: x.max } : null; });
+  const refresh = String(req.query?.refresh || '') === '1';
+  let narrative = rep.analysis || null;
+  if ((!narrative || refresh) && aiEnabled() && a.total) {
+    try {
+      narrative = await narrate(a);
+      await pool.query('UPDATE reports SET analysis=$2, analysis_at=now() WHERE id=$1', [rep.id, JSON.stringify(narrative)]);
+    } catch (e) { req.log.warn('analysis narrative: ' + e.message); }
+  }
+  return { ...a, narrative, narrative_at: rep.analysis_at || null, extraction: rep.extraction_stats || null,
+    disclaimer: 'A reading of the report to help you understand it — not a medical opinion. Confirm with a doctor.' };
+});
+
+// ── one parameter across every report, for trend charts ──
+app.get('/api/parents/:parentId/params/:name/trend', async (req) => {
+  const { rows } = await pool.query(
+    `SELECT r.id AS report_id, r.report_date, rp.value::float AS value, rp.unit,
+            rp.ref_low::float AS ref_low, rp.ref_high::float AS ref_high, rp.ref_text, rp.verified
+     FROM report_params rp JOIN reports r ON r.id = rp.report_id
+     WHERE r.parent_id=$1 AND lower(rp.name)=lower($2) ORDER BY r.report_date`, [req.params.parentId, req.params.name]);
+  return { name: req.params.name, points: rows };
+});
+
+// ── every parameter that appears in 2+ reports (what can be charted) ──
+app.get('/api/parents/:parentId/params', async (req) => {
+  const { rows } = await pool.query(
+    `SELECT rp.name, count(DISTINCT r.id)::int AS reports, max(r.report_date) AS latest, min(rp.category) AS category
+     FROM report_params rp JOIN reports r ON r.id = rp.report_id
+     WHERE r.parent_id=$1 GROUP BY rp.name ORDER BY count(DISTINCT r.id) DESC, rp.name`, [req.params.parentId]);
+  return { params: rows };
+});
+
 app.post('/api/reports/:id/explain', async (req, reply) => {
   if (!ANTHROPIC_KEY) return reply.send({ summary: null, no_key: true });
-  const { rows: chk } = await pool.query(
-    `SELECT 1 FROM reports r JOIN family_members fm ON fm.parent_id=r.parent_id AND fm.user_id=$1
-     WHERE r.id=$2`, [req.user.id, req.params.id]);
-  if (!chk[0]) return reply.code(403).send({ error: 'no access' });
+  const rr = await reportFor(req, reply); if (!rr) return;
   const rep = await fetchReportWithParams(req.params.id);
   if (!rep) return reply.code(404).send({ error: 'not found' });
   const ranges = await getRanges();
@@ -875,7 +905,7 @@ Rules you must follow:
 - 4-5 sentences, warm and readable.
 
 REPORT: ${rep.report_type}, ${String(rep.report_date).slice(0, 10)}${rep.lab_name ? ', ' + rep.lab_name : ''}
-${lines.join('\n')}`, 500);
+${lines.join('\n')}`, 500, 'fast');
     return { summary };
   } catch (e) {
     return reply.send({ summary: null, error: 'The explanation is unavailable right now — the readings above are still accurate.' });
@@ -899,8 +929,7 @@ app.post('/api/parents/:parentId/messages/voice', async (req, reply) => {
      VALUES ($1,$2,$3,$4,$5,$6,$7,true) RETURNING *`,
     [req.params.parentId, req.user.id, dir, body || (kind === 'audio' ? 'Voice note' : 'Photo'),
      kind, file.mimetype, secs]);
-  await fs.promises.mkdir(MEDIA_DIR, { recursive: true });
-  await fs.promises.writeFile(path.join(MEDIA_DIR, rows[0].id), buf);
+  await putFile(pool, 'media', rows[0].id, file.mimetype, buf, file.filename);
   return rows[0];
 });
 
@@ -910,25 +939,35 @@ app.get('/api/messages/:id/media', async (req, reply) => {
      JOIN family_members fm ON fm.parent_id = m.parent_id AND fm.user_id=$1
      WHERE m.id=$2`, [req.user.id, req.params.id]);
   if (!rows[0]) return reply.code(403).send({ error: 'no access' });
-  const p = path.join(MEDIA_DIR, req.params.id);
-  if (!fs.existsSync(p)) return reply.code(404).send({ error: 'media missing' });
-  reply.header('Content-Type', rows[0].media_mime || 'application/octet-stream');
-  return reply.send(fs.createReadStream(p));
+  const f = await getFile(pool, 'media', req.params.id, path.join(MEDIA_DIR, req.params.id));
+  if (!f) return reply.code(404).send({ error: 'This voice note or photo is no longer stored.' });
+  reply.header('Content-Type', rows[0].media_mime || f.mime || 'application/octet-stream');
+  return reply.send(f.bytes);
 });
 
 // ── web push (PWA notifications) ──
 // Keys persist in data/ so subscriptions survive restarts. Set VAPID_PUBLIC/
 // VAPID_PRIVATE in .env to pin them explicitly.
-const VAPID_FILE = path.join(__dirname, '..', 'data', 'vapid.json');
+const VAPID_FILE = path.join(DATA_DIR, 'vapid.json');
+// Push keys must be stable: new keys silently break every phone's subscription.
+// Order: env vars → database (generated once, survives every deploy) → legacy disk file.
 let VAPID = null;
 if (process.env.VAPID_PUBLIC && process.env.VAPID_PRIVATE) {
   VAPID = { publicKey: process.env.VAPID_PUBLIC, privateKey: process.env.VAPID_PRIVATE };
-} else if (fs.existsSync(VAPID_FILE)) {
-  VAPID = JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8'));
 } else {
-  VAPID = webpush.generateVAPIDKeys();
-  fs.mkdirSync(path.dirname(VAPID_FILE), { recursive: true });
-  fs.writeFileSync(VAPID_FILE, JSON.stringify(VAPID));
+  try {
+    const saved = await getSetting(pool, 'vapid');
+    if (saved) VAPID = JSON.parse(saved);
+    else {
+      VAPID = fs.existsSync(VAPID_FILE) ? JSON.parse(fs.readFileSync(VAPID_FILE, 'utf8')) : webpush.generateVAPIDKeys();
+      await setSetting(pool, 'vapid', JSON.stringify(VAPID));
+      app.log.info('push: keys stored in the database (stable across deploys)');
+    }
+  } catch (e) {
+    // table missing (migration not yet run) — never refuse to boot over push
+    VAPID = webpush.generateVAPIDKeys();
+    app.log.warn('push: could not persist keys yet (' + e.message + ') — run migrations');
+  }
 }
 webpush.setVapidDetails('mailto:' + (process.env.NOTIFY_FROM || 'care@parentfirst.app'),
   VAPID.publicKey, VAPID.privateKey);

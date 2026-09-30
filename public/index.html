@@ -745,6 +745,12 @@
 
   .inst{ background:var(--sage-light); border:1px solid var(--sage); border-radius:var(--r-lg); padding:1rem 1.2rem; }
   .inst-t{ font-weight:700; font-size:16px; } .inst-s{ font-size:14px; color:var(--ink-muted); margin:4px 0 10px; } .inst-a{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .an-k{ font-size:12px; font-weight:700; color:var(--ink-muted); margin:14px 0 6px; }
+  .an-item{ padding:7px 0; border-top:1px solid var(--border); font-size:14px; } .an-sub{ font-size:13px; color:var(--ink-muted); margin-top:3px; }
+  .an-rng{ font-size:12px; color:var(--ink-faint); } .an-far{ font-size:12px; color:var(--red); font-weight:600; }
+  .an-list{ margin:4px 0 0; padding-left:18px; font-size:13.5px; } .an-list li{ margin-bottom:4px; }
+  .vf{ font-size:10px; border-radius:4px; padding:1px 5px; margin-left:4px; } .vf-ok{ background:var(--sage-light); color:var(--sage); } .vf-fix{ background:var(--gold-light); color:#7a5a08; } .vf-no{ background:#f3e1df; color:var(--red); }
 </style>
 </head>
 <body>
@@ -793,7 +799,7 @@
     <input class="chat-input" id="authPassword" type="password" placeholder="••••••••" style="background:var(--white);width:100%;" onkeydown="if(event.key==='Enter')submitAuth()">
     <div id="famCodeWrap" style="display:none;">
       <label class="dl-label" style="margin-top:0.9rem;">Family code (if someone gave you one)</label>
-      <input class="chat-input" id="authFamCode" maxlength="6" placeholder="e.g. 7K2F9A" style="background:var(--white);width:100%;text-transform:uppercase;letter-spacing:3px;">
+      <input class="chat-input" id="authFamCode" maxlength="9" placeholder="e.g. ABCD-2345" style="background:var(--white);width:100%;text-transform:uppercase;letter-spacing:3px;">
     </div>
     <div id="authErr"></div>
     <button class="btn-primary" style="width:100%;justify-content:center;margin-top:1.25rem;" id="authBtn" onclick="submitAuth()">Sign in</button>
@@ -2109,7 +2115,8 @@ async function showDetail(id){
       }
       if(p.range.source==='report') rangeTxt += ' <span class="rng-src">from report</span>';
     }
-    return '<div class="param-row"><div class="param-name">'+esc(p.name)+'</div><div class="param-val">'+p.value+' <span style="font-size:11px;color:var(--ink-faint);font-family:var(--font-body);font-weight:400;">'+esc(p.unit||'')+'</span></div><div style="color:var(--ink-faint);font-size:12px;">'+rangeTxt+'</div><div><span class="param-status '+statusCls(p.status)+'">'+statusLabel(p.status)+'</span></div></div>';
+    const vf = p.verified==='document'||p.verified==='model' ? '<span class="vf vf-ok" title="Checked against the report">✓</span>' : p.verified==='corrected' ? '<span class="vf vf-fix" title="Corrected on a second read (first read: '+p.first_read+')">corrected</span>' : p.verified==='unverified' ? '<span class="vf vf-no" title="Could not be checked — confirm against the original">check</span>' : '';
+    return '<div class="param-row"><div class="param-name">'+esc(p.name)+vf+'</div><div class="param-val">'+p.value+' <span style="font-size:11px;color:var(--ink-faint);font-family:var(--font-body);font-weight:400;">'+esc(p.unit||'')+'</span></div><div style="color:var(--ink-faint);font-size:12px;">'+rangeTxt+'</div><div><span class="param-status '+statusCls(p.status)+'">'+statusLabel(p.status)+'</span></div></div>';
   }).join('');
   const viewBtn = rep.has_file
     ? '<a href="/api/reports/'+rep.id+'/file" target="_blank" class="btn-out" style="display:inline-flex;align-items:center;gap:7px;text-decoration:none;margin-bottom:1.25rem;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg> View original '+(rep.file_name?('· '+esc(rep.file_name)):'document')+'</a>'
@@ -2137,20 +2144,31 @@ async function deleteReport(id, name){
 const DEG={marked:'well outside',notable:'outside',slight:'slightly outside'};
 async function loadAnalysis(id){
   const host=document.getElementById('repAnalysis'); if(!host) return;
+  host.innerHTML='<div class="an-box"><div class="an-meta">Reading every value…</div></div>';
   let a;
-  try{ a = await j('/api/reports/'+id+'/analysis'); }catch(e){ return; }
-  const chips = a.flagged.map(f=>
-    '<span class="an-chip an-'+esc(f.degree)+'">'+esc(f.name)+' <strong>'+f.value+'</strong> '+esc(f.unit)
-    + ' <span class="an-deg">'+esc(DEG[f.degree])+'</span></span>').join('');
+  try{ a = await j('/api/reports/'+id+'/analysis'); }catch(e){ host.innerHTML=''; return; }
+  const n = a.narrative || {};
+  const v = a.verification || {};
+  const lvl = !a.abnormal_count ? 'ok' : a.abnormal.some(x=>(x.deviation_pct||0)>=25) ? 'marked' : 'notable';
+  const li = arr => (arr&&arr.length) ? '<ul class="an-list">'+arr.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>' : '';
+  const ab = (n.abnormal&&n.abnormal.length ? n.abnormal : a.abnormal.map(x=>({name:x.name}))).map(x=>{
+    const r=a.abnormal.find(y=>y.name.toLowerCase()===String(x.name||'').toLowerCase());
+    return '<div class="an-item"><b>'+esc(x.name)+'</b>'+(r?' — '+r.value+' '+esc(r.unit||'')+' <span class="an-rng">(range '+esc(r.ref_text||'not printed')+(r.deviation_pct?', '+r.deviation_pct+'% '+(r.status==='high'?'above':'below'):'')+')</span>':'')
+      +(x.how_far?' <span class="an-far">'+esc(x.how_far)+'</span>':'')
+      +(x.what_it_measures?'<div class="an-sub">'+esc(x.what_it_measures)+' '+esc(x.what_it_may_relate_to||'')+'</div>':'')+'</div>';
+  }).join('');
+  const checked = (v.document||0)+(v.model||0)+(v.corrected||0);
   host.innerHTML =
-    '<div class="an-box an-lvl-'+esc(a.level)+'">'
-    + '<div class="an-head"><span class="an-dot"></span>'+esc(a.headline)+'</div>'
-    + (chips?'<div class="an-chips">'+chips+'</div>':'')
-    + '<div class="an-advice">'+esc(a.advice)+'</div>'
-    + '<div class="an-meta">'+a.in_range+' value'+(a.in_range===1?'':'s')+' in range'
-      + (a.unreadable? ' · '+a.unreadable+' without a reference range':'')+'</div>'
-    + (window.AI_ON!==false? '<button class="an-explain" onclick="explainReport(\''+id+'\')">Explain this simply</button>':'')
-    + '<div class="an-ai" id="anAi" style="display:none;"></div>'
+    '<div class="an-box an-lvl-'+lvl+'">'
+    + '<div class="an-head"><span class="an-dot"></span>'+a.total+' values read · '+(a.abnormal_count? a.abnormal_count+' outside range' : 'all within range')+'</div>'
+    + (checked ? '<div class="an-meta">'+checked+' of '+a.total+' values checked against the report'+(v.corrected?' · '+v.corrected+' corrected on a second read':'')+(v.unverified?' · '+v.unverified+' could not be checked':'')+'</div>' : '')
+    + (n.overview ? '<div class="an-advice">'+esc(n.overview)+'</div>' : '')
+    + (ab ? '<div class="an-k">Outside range</div>'+ab : '')
+    + (n.patterns&&n.patterns.length ? '<div class="an-k">Patterns</div>'+li(n.patterns) : '')
+    + (n.trends&&n.trends.length ? '<div class="an-k">Since the last report</div>'+li(n.trends) : '')
+    + (n.discuss_with_doctor&&n.discuss_with_doctor.length ? '<div class="an-k">Ask the doctor</div>'+li(n.discuss_with_doctor) : '')
+    + (n.reassurance ? '<div class="an-meta" style="color:var(--sage)">'+esc(n.reassurance)+'</div>' : '')
+    + (a.qualitative&&a.qualitative.length ? '<div class="an-k">Other results</div>'+a.qualitative.map(q=>'<div class="an-item">'+esc(q.name)+': <b>'+esc(q.result)+'</b>'+(q.ref_text?' <span class="an-rng">(normal: '+esc(q.ref_text)+')</span>':'')+'</div>').join('') : '')
     + '<div class="an-disc">'+esc(a.disclaimer)+'</div>'
     + '</div>';
 }
@@ -3588,7 +3606,7 @@ async function loadFamily(){
       '<button class="fam-chip'+(f.id===fam.id?' on':'')+'" onclick="switchFamily(\''+f.id+'\')">'+esc(f.name)+' <span class="fam-chip-n">'+f.person_count+'</span></button>').join('')+'</div>';
   }
   document.getElementById('famTitle').innerHTML = esc(fam.name)
-    + (fam.join_code ? ' <span class="fam-code" title="Anyone signing up with this code joins this family">Code: <b>'+esc(fam.join_code)+'</b> <button class="fam-code-copy" onclick="navigator.clipboard.writeText(\''+esc(fam.join_code)+'\').then(()=>toast(\'Code copied.\',\'success\'))">copy</button></span>' : '');
+    + ((fam.invite_code||fam.join_code) ? ' <span class="fam-code" title="Anyone signing up with this code joins this family">Code: <b>'+esc((fam.invite_code||fam.join_code))+'</b> <button class="fam-code-copy" onclick="navigator.clipboard.writeText(\''+esc((fam.invite_code||fam.join_code))+'\').then(()=>toast(\'Code copied.\',\'success\'))">copy</button></span>' : '');
   let persons=[], members=[], invites=[];
   try{ persons = (await j('/api/families/'+fam.id+'/persons')).persons; }catch(e){}
   try{ members = (await j('/api/families/'+fam.id+'/members')).members; }catch(e){}

@@ -1,4 +1,6 @@
 import { notifyOperator, notifyPeople } from './notify.js';
+import { allocateFamilyCode, mapExistingMembersToPerson } from './family.js';
+import { upsertProfile } from './care-profile.js';
 // Care modules: medications, caregiver daily logs (+ family update), emergency card.
 // Registered as a Fastify plugin from server.js.
 
@@ -846,7 +848,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     //             they OWN + a care relationship. Carer lands in the carer view.
     //   parent -> creates their OWN self record + a family they belong to as
     //             CARE_RECIPIENT. Parent lands in the elder view.
-    const { name, age, city, gender, phone, account_type, profile } = req.body || {};
+    const { name, age, city, state, country, gender, phone, account_type, profile } = req.body || {};
     const isCarer = (account_type || 'carer') !== 'parent';
     const client = await pool.connect();
     try {
@@ -862,22 +864,24 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
         let familyId = fam[0] && fam[0].id;
         if (!familyId) {
           const { rows: nf } = await client.query(
-            `INSERT INTO families (name, created_by) VALUES ($1,$2) RETURNING id`,
-            [(req.user.name || 'My') + "'s family", req.user.id]);
+            `INSERT INTO families (name, created_by, invite_code) VALUES ($1,$2,$3) RETURNING id`,
+            [(req.user.name || 'My') + "'s family", req.user.id, await allocateFamilyCode(client)]);
           familyId = nf[0].id;
           await client.query(
-            `INSERT INTO family_memberships (family_id, user_id, role) VALUES ($1,$2,'OWNER')
+            `INSERT INTO family_memberships (family_id, user_id, role, joined_via) VALUES ($1,$2,'OWNER','created')
              ON CONFLICT (family_id, user_id) DO NOTHING`, [familyId, req.user.id]);
         }
         // create the cared-for person (no login of their own yet)
         const { rows: pr } = await client.query(
-          `INSERT INTO parents (name, age, relation, city, created_by)
-           VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-          [personName, age || null, (profile && profile.relation) || 'parent', city || null, req.user.id]);
+          `INSERT INTO parents (name, age, relation, city, state, country, phone, created_by)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+          [personName, age || null, (profile && profile.relation) || 'parent',
+           city || null, state || null, country || null, phone || null, req.user.id]);
         const parent = pr[0];
         await client.query(
           `INSERT INTO persons_in_family (family_id, person_id) VALUES ($1,$2)
            ON CONFLICT (family_id, person_id) DO NOTHING`, [familyId, parent.id]);
+        await mapExistingMembersToPerson(client, familyId, parent.id);
         await client.query(
           `INSERT INTO care_relationships (family_id, caregiver_user_id, person_id, permissions)
            VALUES ($1,$2,$3,$4) ON CONFLICT (family_id, caregiver_user_id, person_id) DO NOTHING`,
@@ -906,18 +910,20 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
       let parent;
       if (existing[0]) {
         const { rows } = await client.query(
-          `UPDATE parents SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city) WHERE id=$1 RETURNING *`,
-          [existing[0].id, personName, age || null, city || null]);
+          `UPDATE parents SET name=$2, age=COALESCE($3,age), city=COALESCE($4,city),
+             state=COALESCE($5,state), country=COALESCE($6,country), phone=COALESCE($7,phone)
+           WHERE id=$1 RETURNING *`,
+          [existing[0].id, personName, age || null, city || null, state || null, country || null, phone || null]);
         parent = rows[0];
       } else {
         const { rows } = await client.query(
-          `INSERT INTO parents (name, age, relation, city, created_by, user_id)
-           VALUES ($1,$2,'self',$3,$4,$4) RETURNING *`,
-          [personName, age || null, city || null, req.user.id]);
+          `INSERT INTO parents (name, age, relation, city, state, country, phone, created_by, user_id)
+           VALUES ($1,$2,'self',$3,$4,$5,$6,$7,$7) RETURNING *`,
+          [personName, age || null, city || null, state || null, country || null, phone || null, req.user.id]);
         parent = rows[0];
         const { rows: f } = await client.query(
-          `INSERT INTO families (name, created_by) VALUES ($1,$2) RETURNING id`,
-          [(personName || 'My') + "'s family", req.user.id]);
+          `INSERT INTO families (name, created_by, invite_code) VALUES ($1,$2,$3) RETURNING id`,
+          [(personName || 'My') + "'s family", req.user.id, await allocateFamilyCode(client)]);
         await client.query(`INSERT INTO family_memberships (family_id, user_id, role) VALUES ($1,$2,'CARE_RECIPIENT') ON CONFLICT DO NOTHING`, [f[0].id, req.user.id]);
         await client.query(`INSERT INTO persons_in_family (family_id, person_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [f[0].id, parent.id]);
       }
@@ -942,22 +948,6 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     } finally { client.release(); }
   });
 
-  const PROFILE_COLS = ['gender', 'height_cm', 'weight_kg', 'smoking', 'alcohol', 'mobility',
-    'eyesight', 'hearing', 'speech', 'memory', 'lives_alone', 'fall_history', 'diet',
-    'languages', 'notes', 'text_size', 'phone'];
-
-  async function upsertProfile(client, parentId, p) {
-    const cols = PROFILE_COLS.filter((c) => p[c] !== undefined && p[c] !== null && p[c] !== '');
-    if (!cols.length) { await client.query('INSERT INTO care_profiles (parent_id) VALUES ($1) ON CONFLICT DO NOTHING', [parentId]); return; }
-    const vals = cols.map((c) => (c === 'lives_alone' ? !!p[c] : p[c]));
-    const placeholders = cols.map((_, i) => `$${i + 2}`).join(',');
-    const updates = cols.map((c, i) => `${c}=$${i + 2}`).join(',');
-    await client.query(
-      `INSERT INTO care_profiles (parent_id, ${cols.join(',')}) VALUES ($1, ${placeholders})
-       ON CONFLICT (parent_id) DO UPDATE SET ${updates}, updated_at=now()`,
-      [parentId, ...vals]);
-  }
-
   app.get('/api/parents/:parentId/profile', async (req) => {
     const { rows } = await pool.query('SELECT * FROM care_profiles WHERE parent_id=$1', [req.params.parentId]);
     return rows[0] || { parent_id: req.params.parentId, text_size: 'normal' };
@@ -968,11 +958,16 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     if (!(roleAtLeast(req.parentRole, 'member') || req.parentRole === 'dependent')) {
       return reply.code(403).send({ error: 'not allowed to edit this profile' });
     }
-    const { name, age, city } = req.body || {};
-    if (!name) return reply.code(400).send({ error: 'name required' });
+    const b = req.body || {};
+    if (!b.name) return reply.code(400).send({ error: 'name required' });
+    const EDITABLE = ['name', 'age', 'dob', 'relation', 'city', 'state', 'country', 'address_line',
+      'pincode', 'phone', 'email', 'blood_group', 'allergies', 'conditions',
+      'primary_doctor', 'doctor_phone', 'emergency_name', 'emergency_phone', 'emergency_relation'];
+    const cols = EDITABLE.filter((k) => b[k] !== undefined);
+    const vals = cols.map((k) => (k === 'age' ? (b[k] ? +b[k] : null) : (b[k] === '' ? null : b[k])));
+    const sets = cols.map((k, i) => `${k}=$${i + 2}`).join(',');
     const { rows } = await pool.query(
-      `UPDATE parents SET name=$2, age=$3, city=$4 WHERE id=$1 RETURNING id, name, age, city`,
-      [req.params.parentId, name, age ? +age : null, city || null]);
+      `UPDATE parents SET ${sets} WHERE id=$1 RETURNING *`, [req.params.parentId, ...vals]);
     return rows[0];
   });
 
@@ -1094,6 +1089,7 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
     if (!rows[0]) return reply.code(403).send({ error: 'no access' });
     if (!roleAtLeast(rows[0].role, 'member')) return reply.code(403).send({ error: 'member access required' });
     await pool.query('DELETE FROM documents WHERE id=$1', [req.params.id]);
+    await pool.query(`DELETE FROM stored_files WHERE owner_kind='document' AND owner_id=$1`, [req.params.id]);
     return { deleted: true };
   });
 
@@ -1414,18 +1410,34 @@ ${insights.map(i => `- [${i.level}] ${i.title}: ${i.detail}`).join('\n')}`;
        WHERE fm.parent_id=$1 AND fm.role IN ('admin','member') AND u.id <> $2`,
       [req.params.parentId, req.user.id]);
     const isSos = (severity === 'sos');
-    // push reaches phones instantly — the email is the paper trail
-    try { app.sendPush(watchers.map((w) => w.id),
-      `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'family'}`, message, '/'); } catch {}
-    notifyPeople(app, watchers.map((w) => w.email),
-      `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'a family member'}`, [
-        `${message}`,
-        '',
-        `Raised by: ${req.user.name}`,
-        isSos ? 'Please call them now. Open the app to see who else is responding.'
-              : 'Open the app to see the details and mark it resolved.',
-      ]).catch(() => {});
-    return rows[0];
+    const title = `${isSos ? '\ud83d\udea8 SOS' : '\u26a0 Alert'} — ${pr2[0]?.name || 'family'}`;
+
+    // These were fire-and-forget: sendPush was never awaited, so its rejection
+    // escaped the try/catch entirely, and notifyPeople's failure was thrown
+    // away. Whoever pressed SOS got a 200 either way. For an SOS the ONE thing
+    // the person needs to know is whether it actually reached anybody, so the
+    // outcome is awaited and returned.
+    const delivered = { push: false, email: false, watchers: watchers.length };
+    if (watchers.length) {
+      try {
+        await app.sendPush(watchers.map((w) => w.id), title, message, '/');
+        delivered.push = true;
+      } catch (e) { req.log.error(`alert push failed (${isSos ? 'SOS' : 'alert'}): ${e.message}`); }
+      try {
+        const r = await notifyPeople(app, watchers.map((w) => w.email), title, [
+          `${message}`,
+          '',
+          `Raised by: ${req.user.name}`,
+          isSos ? 'Please call them now. Open the app to see who else is responding.'
+                : 'Open the app to see the details and mark it resolved.',
+        ]);
+        delivered.email = !!(r && r.sent);
+      } catch (e) { req.log.error(`alert email failed (${isSos ? 'SOS' : 'alert'}): ${e.message}`); }
+    }
+    if (isSos && !delivered.push && !delivered.email) {
+      req.log.error(`SOS for ${pr2[0]?.name} REACHED NOBODY — ${watchers.length} watcher(s), every channel failed`);
+    }
+    return { ...rows[0], delivered };
   });
   app.get('/api/parents/:parentId/alerts', async (req) => {
     const { rows } = await pool.query(

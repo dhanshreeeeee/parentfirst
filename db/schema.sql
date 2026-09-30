@@ -621,6 +621,109 @@ CREATE OR REPLACE VIEW family_members AS
   FROM persons p WHERE p.user_id IS NOT NULL;
 
 
+-- ═══ from migration 024: join codes, admin roles, full intake ═══
+
+-- ─────────────────────────────────────────────────────────────
+-- 1. families gain a short join code
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE families ADD COLUMN IF NOT EXISTS invite_code TEXT;
+ALTER TABLE families ADD COLUMN IF NOT EXISTS code_rotated_at TIMESTAMPTZ;
+
+-- Unambiguous alphabet: no O/0, no I/1/L. Format XXXX-XXXX.
+CREATE OR REPLACE FUNCTION pf_gen_family_code() RETURNS TEXT AS $fn$
+DECLARE
+  alphabet TEXT := 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  out TEXT := '';
+  i INT;
+BEGIN
+  FOR i IN 1..8 LOOP
+    IF i = 5 THEN out := out || '-'; END IF;
+    out := out || substr(alphabet, 1 + floor(random() * length(alphabet))::int, 1);
+  END LOOP;
+  RETURN out;
+END;
+$fn$ LANGUAGE plpgsql;
+
+-- backfill every existing family, retrying on the (vanishingly rare) collision
+DO $$
+DECLARE f RECORD; c TEXT; tries INT;
+BEGIN
+  FOR f IN SELECT id FROM families WHERE invite_code IS NULL LOOP
+    tries := 0;
+    LOOP
+      c := pf_gen_family_code();
+      EXIT WHEN NOT EXISTS (SELECT 1 FROM families WHERE invite_code = c);
+      tries := tries + 1;
+      IF tries > 20 THEN RAISE EXCEPTION 'could not allocate a family code'; END IF;
+    END LOOP;
+    UPDATE families SET invite_code = c WHERE id = f.id;
+  END LOOP;
+END $$;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_families_code ON families(invite_code);
+
+-- ─────────────────────────────────────────────────────────────
+-- 2. people: a real address, real contact details, real identity
+--    (city already existed as free text; it stays and is now one part
+--     of country → state → city)
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS country        TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS state          TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS address_line   TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS pincode        TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS phone          TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS email          TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS dob            DATE;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS emergency_name     TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS emergency_phone    TEXT;
+ALTER TABLE parents ADD COLUMN IF NOT EXISTS emergency_relation TEXT;
+
+-- ─────────────────────────────────────────────────────────────
+-- 3. care_profiles: the rest of the health picture.
+--    smoking / alcohol already exist — these are what was missing around them.
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS tobacco            TEXT;   -- 'never'|'former'|'current' (chewing / gutka / khaini)
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS smoking_years      INT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS alcohol_frequency  TEXT;   -- 'daily'|'weekly'|'monthly'|'rarely'
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS chronic_conditions JSONB NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS surgeries          TEXT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS family_history     TEXT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS activity_level     TEXT;   -- 'sedentary'|'light'|'moderate'|'active'
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS sleep_hours        NUMERIC;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS vaccinations       TEXT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS insurer            TEXT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS policy_number      TEXT;
+ALTER TABLE care_profiles ADD COLUMN IF NOT EXISTS intake_completed_at TIMESTAMPTZ;
+
+-- ─────────────────────────────────────────────────────────────
+-- 4. ADMIN is a real role. The OWNER is simply the admin who made the family.
+--    (family_memberships.role is free text; this documents + constrains it.)
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE family_memberships DROP CONSTRAINT IF EXISTS family_memberships_role_chk;
+ALTER TABLE family_memberships ADD CONSTRAINT family_memberships_role_chk
+  CHECK (role IN ('OWNER','ADMIN','CAREGIVER','FAMILY_MEMBER','CARE_RECIPIENT','LOCAL_CAREGIVER','DOCTOR'));
+
+ALTER TABLE invitations DROP CONSTRAINT IF EXISTS invitations_role_chk;
+ALTER TABLE invitations ADD CONSTRAINT invitations_role_chk
+  CHECK (intended_role IN ('OWNER','ADMIN','CAREGIVER','FAMILY_MEMBER','CARE_RECIPIENT','LOCAL_CAREGIVER','DOCTOR'));
+
+-- who joined by typing a code (vs. an emailed invitation) — useful for support
+ALTER TABLE family_memberships ADD COLUMN IF NOT EXISTS joined_via TEXT;
+
+-- ─────────────────────────────────────────────────────────────
+-- 5. the `persons` view must be re-expanded so the new parents columns
+--    are visible/insertable through it (SELECT * is frozen at creation).
+--    Appending columns is a legal CREATE OR REPLACE.
+-- ─────────────────────────────────────────────────────────────
+CREATE OR REPLACE VIEW persons AS SELECT * FROM parents;
+
+-- ─────────────────────────────────────────────────────────────
+-- 6. a code typed on the SIGNUP page is remembered until the email is
+--    verified, then applied at first sign-in. Signing up and joining are
+--    one action for the user, two steps for us.
+-- ─────────────────────────────────────────────────────────────
+ALTER TABLE users ADD COLUMN IF NOT EXISTS pending_join_code TEXT;
+
 CREATE TABLE IF NOT EXISTS medicine_info (
   name         TEXT PRIMARY KEY,
   generic      TEXT,
@@ -658,3 +761,59 @@ CREATE TABLE IF NOT EXISTS checkin_views (
 );
 -- who is taking the elder to the appointment
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS accompany_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+
+-- refresh the persons view so it carries every parents column added above
+CREATE OR REPLACE VIEW persons AS SELECT * FROM parents;
+
+-- ═══ v2: files live in the database (Render's disk is wiped on every deploy) ═══
+CREATE TABLE IF NOT EXISTS stored_files (
+  owner_kind TEXT NOT NULL,            -- 'report' | 'document' | 'media'
+  owner_id   UUID NOT NULL,
+  mime       TEXT NOT NULL,
+  file_name  TEXT,
+  size       INTEGER NOT NULL,
+  bytes      BYTEA NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (owner_kind, owner_id)
+);
+-- server secrets that must survive deploys (push-notification VAPID keys)
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- stored_files is polymorphic, so FKs can't cascade; triggers keep it clean
+CREATE OR REPLACE FUNCTION pf_drop_stored_file() RETURNS trigger AS $fn$
+BEGIN
+  DELETE FROM stored_files WHERE owner_kind = TG_ARGV[0] AND owner_id = OLD.id;
+  RETURN OLD;
+END; $fn$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS trg_reports_file ON reports;
+CREATE TRIGGER trg_reports_file AFTER DELETE ON reports FOR EACH ROW EXECUTE FUNCTION pf_drop_stored_file('report');
+DROP TRIGGER IF EXISTS trg_documents_file ON documents;
+CREATE TRIGGER trg_documents_file AFTER DELETE ON documents FOR EACH ROW EXECUTE FUNCTION pf_drop_stored_file('document');
+DROP TRIGGER IF EXISTS trg_messages_file ON messages;
+CREATE TRIGGER trg_messages_file AFTER DELETE ON messages FOR EACH ROW EXECUTE FUNCTION pf_drop_stored_file('media');
+
+-- ═══ v2: report intelligence (mirrors migration 030) ═══
+-- report intelligence: every row keeps its category, the lab's own flag, and how it was verified
+ALTER TABLE report_params ADD COLUMN IF NOT EXISTS category   TEXT;
+ALTER TABLE report_params ADD COLUMN IF NOT EXISTS lab_flag   TEXT;
+ALTER TABLE report_params ADD COLUMN IF NOT EXISTS verified   TEXT;     -- document | model | corrected | unverified | unchecked
+ALTER TABLE report_params ADD COLUMN IF NOT EXISTS first_read NUMERIC;  -- the first model's value, when a second read corrected it
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS patient_name TEXT;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS patient_age  TEXT;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS patient_sex  TEXT;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS qualitative  JSONB NOT NULL DEFAULT '[]';
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS extraction_stats JSONB;
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS analysis     JSONB;    -- cached narrative: opening a report again costs nothing
+ALTER TABLE reports ADD COLUMN IF NOT EXISTS analysis_at  TIMESTAMPTZ;
+-- a report whose name didn't match waits here, so "yes, continue" doesn't re-read the file
+CREATE TABLE IF NOT EXISTS report_drafts (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  parent_id  UUID NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
+  created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  obj JSONB NOT NULL, stats JSONB, method TEXT, mime TEXT, file_name TEXT, bytes BYTEA,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_report_params_name ON report_params (lower(name));

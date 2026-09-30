@@ -1,8 +1,8 @@
 // ParentFirst service worker.
 // Caches the app shell so it opens instantly. API responses are NEVER cached —
 // health data must always come fresh from the server.
-const SHELL = 'pf-shell-v1';
-const FILES = ['/', '/index.html', '/manifest.webmanifest'];
+const SHELL = 'pf-shell-v2';
+const FILES = ['/', '/index.html', '/geo.js', '/manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(SHELL).then((c) => c.addAll(FILES)).then(() => self.skipWaiting()));

@@ -110,10 +110,12 @@ async function digestFor(app, pool, elder, slot, today) {
   // same summary, everywhere the family actually looks
   try { await app.sendPush(watchers.map((w) => w.id), `${title} — ${elder.name}`, lines[0] || '', '/'); } catch {}
   try {
+    // the number can sit on either record — the intake form writes the person,
+    // onboarding wrote the care profile. Take whichever we have.
     const { rows: ph } = await pool.query(
-      `SELECT cp.phone FROM care_profiles cp
-       JOIN parents p ON p.id = cp.parent_id
-       WHERE p.user_id = ANY($1::uuid[]) AND cp.phone IS NOT NULL`,
+      `SELECT COALESCE(p.phone, cp.phone) AS phone FROM parents p
+       LEFT JOIN care_profiles cp ON cp.parent_id = p.id
+       WHERE p.user_id = ANY($1::uuid[]) AND COALESCE(p.phone, cp.phone) IS NOT NULL`,
       [watchers.map((w) => w.id)]);
     if (ph.length) await sendWhatsApp(app, ph.map((x) => x.phone),
       `${title} — ${elder.name}\n\n` + lines.join('\n'));

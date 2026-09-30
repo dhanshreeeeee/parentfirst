@@ -16,6 +16,7 @@ import 'dotenv/config';
 import pg from 'pg';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'db', 'migrations');
@@ -35,8 +36,16 @@ try {
     applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
   )`);
 
-  const { rows } = await pool.query('SELECT filename FROM schema_migrations');
+  // fingerprint every applied file, so a migration EDITED after it ran is caught
+  // instead of silently skipped (this is how the live DB drifted before)
+  await pool.query('ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS checksum TEXT');
+  const sha = (f) => crypto.createHash('sha256').update(fs.readFileSync(path.join(DIR, f))).digest('hex').slice(0, 16);
+  const { rows } = await pool.query('SELECT filename, checksum FROM schema_migrations');
   const done = new Set(rows.map((r) => r.filename));
+  for (const r of rows) {
+    if (!r.checksum || !files.includes(r.filename)) continue;
+    if (sha(r.filename) !== r.checksum) console.warn(`  ⚠ ${r.filename} changed after it was applied — its new contents did NOT run. Put changes in a new migration.`);
+  }
 
   // A database that predates this runner already has its early migrations
   // applied by hand — schema.sql created every table through 023 at once.
@@ -80,7 +89,8 @@ try {
       if (!selfTx) await c.query('BEGIN');
       await c.query(sql);
       if (!selfTx) await c.query('COMMIT');
-      await c.query('INSERT INTO schema_migrations (filename) VALUES ($1) ON CONFLICT DO NOTHING', [f]);
+      await c.query(`INSERT INTO schema_migrations (filename, checksum) VALUES ($1,$2)
+                     ON CONFLICT (filename) DO UPDATE SET checksum=EXCLUDED.checksum`, [f, sha(f)]);
       console.log('  ✓', f);
     } catch (e) {
       try { await c.query('ROLLBACK'); } catch { /* already rolled back */ }
